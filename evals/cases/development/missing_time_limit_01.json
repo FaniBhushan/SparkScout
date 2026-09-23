@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "case_id": "missing-time-limit-01",
+  "split": "development",
+  "description": "Request validation must stop when a mandatory field is missing.",
+  "prompt": "I am interested in a mathematics capstone about optimization. I am an intermediate student working alone.",
+  "expected_request": null,
+  "fixture_set": null,
+  "expected": {
+    "outcome": "request_validation_error",
+    "missing_fields": ["time_limit_days"],
+    "must_satisfy": ["asks the user for the missing time limit", "does not start source retrieval"],
+    "forbidden_outcomes": ["guesses a deadline", "returns final proposals"]
+  }
+}

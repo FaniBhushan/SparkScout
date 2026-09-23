@@ -1,0 +1,35 @@
+[
+  {
+    "schema_version": "1.0",
+    "chunk_id": "aie-paper-001-c1",
+    "source_id": "aie-paper-001",
+    "ordinal": 0,
+    "text": "A retrieval-grounded application should evaluate retrieval relevance, citation correctness, groundedness, and end-user usefulness separately.",
+    "content_hash": "sha256:aie-paper-001-c1",
+    "token_count": 18,
+    "start_offset": 0,
+    "end_offset": 137
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "aie-doc-001-c1",
+    "source_id": "aie-doc-001",
+    "ordinal": 0,
+    "text": "Small embedding models and quantized generation models can support local prototypes without training a foundation model.",
+    "content_hash": "sha256:aie-doc-001-c1",
+    "token_count": 17,
+    "start_offset": 0,
+    "end_offset": 114
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "aie-repo-001-c1",
+    "source_id": "aie-repo-001",
+    "ordinal": 0,
+    "text": "The starter exposes replaceable ingestion, retrieval, citation, and evaluation components and runs with Python on a laptop.",
+    "content_hash": "sha256:aie-repo-001-c1",
+    "token_count": 18,
+    "start_offset": 0,
+    "end_offset": 118
+  }
+]

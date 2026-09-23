@@ -1,0 +1,21 @@
+[
+  {
+    "schema_version": "1.0",
+    "source_id": "marine-community-001",
+    "provider": "fixture",
+    "source_type": "community_signal",
+    "title": "Ideas for student ocean projects",
+    "authors_or_owners": ["Synthetic Community Forum"],
+    "published_at": "2025-03-14",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/marine-community-001",
+    "query_id": "marine-query-001",
+    "domain_tags": ["marine biology", "student projects"],
+    "abstract_or_snippet": "A synthetic community post that mentions project ideas but provides no official dataset evidence.",
+    "license_access_note": "Synthetic fixture representing an excluded community source.",
+    "content_hash": "sha256:marine-community-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-marine-community-001",
+    "metadata_conflicts": {}
+  }
+]

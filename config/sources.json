@@ -1,0 +1,132 @@
+{
+  "schema_version": "1.0",
+  "domains": ["computer_science", "ai_engineering", "mathematics", "robotics", "engineering", "life_sciences", "medicine", "social_science"],
+  "source_types": {
+    "scholarly_article": {
+      "evidence_tier": "scholarly",
+      "allowed_uses": ["methods", "prior_work", "evaluation", "limitations"],
+      "prohibited_uses": [],
+      "default_max_records": 20,
+      "default_max_age_days": null
+    },
+    "preprint": {
+      "evidence_tier": "scholarly",
+      "allowed_uses": ["recent_methods", "prior_work", "open_questions"],
+      "prohibited_uses": ["treat_as_peer_reviewed"],
+      "default_max_records": 10,
+      "default_max_age_days": 1825
+    },
+    "official_dataset": {
+      "evidence_tier": "primary",
+      "allowed_uses": ["data_availability", "feasibility", "evaluation"],
+      "prohibited_uses": [],
+      "default_max_records": 10,
+      "default_max_age_days": null
+    },
+    "official_documentation": {
+      "evidence_tier": "primary",
+      "allowed_uses": ["tool_capabilities", "access_conditions", "implementation"],
+      "prohibited_uses": [],
+      "default_max_records": 10,
+      "default_max_age_days": null
+    },
+    "technical_report": {
+      "evidence_tier": "scholarly",
+      "allowed_uses": ["methods", "prior_work", "limitations"],
+      "prohibited_uses": [],
+      "default_max_records": 10,
+      "default_max_age_days": null
+    },
+    "code_repository": {
+      "evidence_tier": "scholarly",
+      "allowed_uses": ["available_tools", "implementation_examples", "maintenance_signals"],
+      "prohibited_uses": ["execute_untrusted_code"],
+      "default_max_records": 10,
+      "default_max_age_days": 1095
+    },
+    "community_signal": {
+      "evidence_tier": "opportunity",
+      "allowed_uses": ["user_pain_points", "demand_signals", "workarounds"],
+      "prohibited_uses": ["prove_novelty", "prove_feasibility"],
+      "default_max_records": 8,
+      "default_max_age_days": 1095
+    },
+    "web_article": {
+      "evidence_tier": "opportunity",
+      "allowed_uses": ["context", "discovery"],
+      "prohibited_uses": ["prove_novelty", "prove_feasibility"],
+      "default_max_records": 8,
+      "default_max_age_days": 1825
+    },
+    "synthetic_fixture": {
+      "evidence_tier": "synthetic",
+      "allowed_uses": ["testing", "demo"],
+      "prohibited_uses": ["real_world_evidence", "empirical_claims"],
+      "default_max_records": 100,
+      "default_max_age_days": null
+    }
+  },
+  "providers": {
+    "openalex": {
+      "adapter": "openalex",
+      "enabled": false,
+      "emits": ["scholarly_article"],
+      "capabilities": ["metadata", "abstract"],
+      "domains": ["*"],
+      "credential_env_vars": [],
+      "timeout_seconds": 20,
+      "max_requests_per_run": 5
+    },
+    "arxiv": {
+      "adapter": "arxiv",
+      "enabled": false,
+      "emits": ["preprint"],
+      "capabilities": ["metadata", "abstract"],
+      "domains": ["computer_science", "ai_engineering", "mathematics", "robotics", "engineering"],
+      "credential_env_vars": [],
+      "timeout_seconds": 20,
+      "max_requests_per_run": 5
+    },
+    "pubmed": {
+      "adapter": "pubmed",
+      "enabled": false,
+      "emits": ["scholarly_article"],
+      "capabilities": ["metadata", "abstract"],
+      "domains": ["life_sciences", "medicine"],
+      "credential_env_vars": [],
+      "timeout_seconds": 20,
+      "max_requests_per_run": 5
+    },
+    "github": {
+      "adapter": "github",
+      "enabled": true,
+      "emits": ["code_repository"],
+      "capabilities": ["metadata"],
+      "domains": ["*"],
+      "credential_env_vars": [],
+      "timeout_seconds": 20,
+      "max_requests_per_run": 5
+    },
+    "tavily": {
+      "adapter": "tavily",
+      "enabled": true,
+      "emits": ["web_article"],
+      "capabilities": ["metadata", "page_snippet"],
+      "domains": ["*"],
+      "credential_env_vars": ["TAVILY_API_KEY"],
+      "timeout_seconds": 20,
+      "max_requests_per_run": 10
+    },
+    "frozen_fixture": {
+      "adapter": "frozen_fixture",
+      "enabled": true,
+      "emits": ["scholarly_article", "preprint", "official_dataset", "official_documentation", "technical_report", "code_repository", "community_signal", "web_article", "synthetic_fixture"],
+      "capabilities": ["metadata", "abstract", "snippet"],
+      "domains": ["*"],
+      "credential_env_vars": [],
+      "timeout_seconds": 5,
+      "max_requests_per_run": 20
+    }
+  },
+  "routes": {}
+}

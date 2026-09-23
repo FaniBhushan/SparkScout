@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "dataset_version": "0.1.0",
+  "fixture_kind": "synthetic",
+  "development_cases": [
+    "cases/development/robotics_agriculture_01.json",
+    "cases/development/software_accessibility_01.json",
+    "cases/development/medicine_public_data_01.json",
+    "cases/development/computer_vision_short_deadline_01.json",
+    "cases/development/social_science_privacy_01.json",
+    "cases/development/ai_engineering_capstone_01.json",
+    "cases/development/missing_time_limit_01.json"
+  ],
+  "held_out_cases": [
+    "cases/held_out/mathematics_optimization_01.json",
+    "cases/held_out/insufficient_coverage_01.json"
+  ]
+}

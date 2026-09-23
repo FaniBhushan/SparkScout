@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "case_id": "ai-engineering-capstone-01",
+  "split": "development",
+  "description": "AI Engineering course capstone requiring a working system and measurable evaluation.",
+  "prompt": "We are two intermediate students taking an AI Engineering course. We have 30 days and laptops to build a capstone using Python, open-source tools, and public data. We are interested in LLM applications and RAG, but cannot train a large model or depend on expensive paid APIs. Give us three final project ideas with a clear evaluation plan.",
+  "expected_request": {
+    "schema_version": "1.0",
+    "domain": "AI engineering",
+    "time_limit_days": 30,
+    "interests": ["LLM applications", "retrieval-augmented generation"],
+    "skill_level": "intermediate",
+    "team_size": 2,
+    "available_resources": ["laptop", "Python", "open-source software"],
+    "excluded_topics": ["training a large model"],
+    "data_constraints": ["public data only", "no expensive paid APIs"],
+    "desired_candidate_count": 12,
+    "finalist_count": 3,
+    "source_policy": {}
+  },
+  "fixture_set": "ai_engineering_capstone_01",
+  "expected": {
+    "outcome": "success",
+    "finalist_count": 3,
+    "required_source_types": [
+      "scholarly_article",
+      "official_documentation",
+      "code_repository"
+    ],
+    "relevant_source_ids": [
+      "aie-paper-001",
+      "aie-doc-001",
+      "aie-repo-001"
+    ],
+    "must_satisfy": [
+      "produces a working AI application",
+      "includes retrieval and answer-quality metrics",
+      "fits 30 days",
+      "runs with open-source or low-cost components"
+    ],
+    "forbidden_outcomes": [
+      "requires training a large foundation model",
+      "requires an expensive paid API",
+      "uses only subjective evaluation",
+      "makes unsupported accuracy claims"
+    ]
+  }
+}

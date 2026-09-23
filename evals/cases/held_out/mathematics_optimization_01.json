@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "case_id": "mathematics-optimization-01",
+  "split": "held_out",
+  "description": "Advanced mathematical-computing project with a fixed deadline.",
+  "prompt": "Two advanced mathematics students have 40 days to build a capstone involving optimization and public benchmark data. We have laptops and Python but no commercial solver licenses.",
+  "expected_request": {
+    "schema_version": "1.0",
+    "domain": "mathematics",
+    "time_limit_days": 40,
+    "interests": ["optimization", "mathematical computing"],
+    "skill_level": "advanced",
+    "team_size": 2,
+    "available_resources": ["laptop", "Python"],
+    "excluded_topics": [],
+    "data_constraints": ["public benchmark data", "no commercial solver licenses"],
+    "desired_candidate_count": 12,
+    "finalist_count": 3,
+    "source_policy": {}
+  },
+  "fixture_set": "mathematics_optimization_01",
+  "expected": {
+    "outcome": "success",
+    "finalist_count": 3,
+    "required_source_types": ["scholarly_article", "code_repository"],
+    "relevant_source_ids": ["math-paper-001", "math-repo-001"],
+    "must_satisfy": ["uses an open-source solver", "defines an objective evaluation metric"],
+    "forbidden_outcomes": ["requires a commercial solver", "makes an unsupported global-optimality claim"]
+  }
+}

@@ -1,0 +1,24 @@
+[
+  {
+    "schema_version": "1.0",
+    "chunk_id": "cv-data-001-c1",
+    "source_id": "cv-data-001",
+    "ordinal": 0,
+    "text": "The small labeled image sample supports rapid train-test experiments without downloading a large corpus.",
+    "content_hash": "sha256:cv-data-001-c1",
+    "token_count": 15,
+    "start_offset": 0,
+    "end_offset": 102
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "cv-repo-001-c1",
+    "source_id": "cv-repo-001",
+    "ordinal": 0,
+    "text": "The notebook completes a baseline CPU experiment in under one hour on a standard laptop.",
+    "content_hash": "sha256:cv-repo-001-c1",
+    "token_count": 15,
+    "start_offset": 0,
+    "end_offset": 89
+  }
+]

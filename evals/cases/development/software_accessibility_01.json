@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "case_id": "software-accessibility-01",
+  "split": "development",
+  "description": "Beginner project with limited resources.",
+  "prompt": "I am a beginner computer science student with 21 days and only a laptop. I want an accessibility-focused software project using open-source tools.",
+  "expected_request": {
+    "schema_version": "1.0",
+    "domain": "computer science",
+    "time_limit_days": 21,
+    "interests": ["accessibility", "software development"],
+    "skill_level": "beginner",
+    "team_size": 1,
+    "available_resources": ["laptop", "open-source software"],
+    "excluded_topics": [],
+    "data_constraints": [],
+    "desired_candidate_count": 12,
+    "finalist_count": 3,
+    "source_policy": {}
+  },
+  "fixture_set": "software_accessibility_01",
+  "expected": {
+    "outcome": "success",
+    "finalist_count": 3,
+    "required_source_types": ["official_documentation", "code_repository"],
+    "relevant_source_ids": ["a11y-doc-001", "a11y-repo-001"],
+    "must_satisfy": ["appropriate for a beginner", "works on a laptop", "uses open-source tools"],
+    "forbidden_outcomes": ["requires paid enterprise software", "requires specialized hardware"]
+  }
+}

@@ -1,0 +1,40 @@
+[
+  {
+    "schema_version": "1.0",
+    "source_id": "soc-paper-001",
+    "provider": "fixture",
+    "source_type": "scholarly_article",
+    "title": "Privacy-preserving transit experience surveys",
+    "authors_or_owners": ["Synthetic Social Research Group"],
+    "published_at": "2024-11-03",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/soc-paper-001",
+    "query_id": "soc-query-001",
+    "domain_tags": ["social science", "transport", "privacy"],
+    "abstract_or_snippet": "A synthetic study of anonymous, coarse-grained public-transport surveys.",
+    "license_access_note": "Synthetic fixture for tests; not real-world evidence.",
+    "content_hash": "sha256:soc-paper-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-soc-paper-001",
+    "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "soc-doc-001",
+    "provider": "fixture",
+    "source_type": "official_documentation",
+    "title": "Anonymous survey design checklist",
+    "authors_or_owners": ["Synthetic Ethics Office"],
+    "published_at": "2025-02-18",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/soc-doc-001",
+    "query_id": "soc-query-002",
+    "domain_tags": ["survey", "privacy", "ethics"],
+    "abstract_or_snippet": "Synthetic guidance for avoiding direct identifiers and unnecessary precise location data.",
+    "license_access_note": "Synthetic fixture for tests; not authoritative guidance.",
+    "content_hash": "sha256:soc-doc-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-soc-doc-001",
+    "metadata_conflicts": {}
+  }
+]

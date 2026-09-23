@@ -1,0 +1,40 @@
+[
+  {
+    "schema_version": "1.0",
+    "source_id": "math-paper-001",
+    "provider": "fixture",
+    "source_type": "scholarly_article",
+    "title": "Benchmarking heuristic optimization methods",
+    "authors_or_owners": ["Synthetic Optimization Lab"],
+    "published_at": "2025-01-09",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/math-paper-001",
+    "query_id": "math-query-001",
+    "domain_tags": ["mathematics", "optimization", "benchmarking"],
+    "abstract_or_snippet": "A synthetic comparison protocol for heuristic solvers using public benchmark instances.",
+    "license_access_note": "Synthetic fixture for tests; not real-world evidence.",
+    "content_hash": "sha256:math-paper-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-math-paper-001",
+    "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "math-repo-001",
+    "provider": "fixture",
+    "source_type": "code_repository",
+    "title": "Open optimization solver examples",
+    "authors_or_owners": ["Synthetic Open Source Team"],
+    "published_at": "2025-06-22",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/math-repo-001",
+    "query_id": "math-query-002",
+    "domain_tags": ["optimization", "Python", "open source"],
+    "abstract_or_snippet": "A synthetic Python repository with open solver examples and benchmark scripts.",
+    "license_access_note": "Synthetic fixture representing an open-source repository.",
+    "content_hash": "sha256:math-repo-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-math-repo-001",
+    "metadata_conflicts": {}
+  }
+]

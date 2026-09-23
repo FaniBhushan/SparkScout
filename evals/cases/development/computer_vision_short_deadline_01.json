@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "case_id": "computer-vision-short-deadline-01",
+  "split": "development",
+  "description": "A seven-day project with no GPU.",
+  "prompt": "Suggest computer vision capstones for one intermediate student. I have seven days, a normal laptop, no GPU, and need public data.",
+  "expected_request": {
+    "schema_version": "1.0",
+    "domain": "computer vision",
+    "time_limit_days": 7,
+    "interests": [],
+    "skill_level": "intermediate",
+    "team_size": 1,
+    "available_resources": ["laptop"],
+    "excluded_topics": [],
+    "data_constraints": ["public data only", "no GPU"],
+    "desired_candidate_count": 12,
+    "finalist_count": 3,
+    "source_policy": {}
+  },
+  "fixture_set": "computer_vision_short_deadline_01",
+  "expected": {
+    "outcome": "success",
+    "finalist_count": 3,
+    "required_source_types": ["official_dataset", "code_repository"],
+    "relevant_source_ids": ["cv-data-001", "cv-repo-001"],
+    "must_satisfy": ["fits seven days", "runs without a GPU", "uses public data"],
+    "forbidden_outcomes": ["trains a large model from scratch", "requires cloud GPU credits"]
+  }
+}

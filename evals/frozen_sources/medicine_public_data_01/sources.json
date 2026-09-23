@@ -1,0 +1,40 @@
+[
+  {
+    "schema_version": "1.0",
+    "source_id": "med-paper-001",
+    "provider": "fixture",
+    "source_type": "scholarly_article",
+    "title": "Non-clinical analysis of de-identified health records",
+    "authors_or_owners": ["Synthetic Health Research Group"],
+    "published_at": "2024-09-12",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/med-paper-001",
+    "query_id": "med-query-001",
+    "domain_tags": ["healthcare", "data science", "ethics"],
+    "abstract_or_snippet": "A synthetic review of descriptive, non-diagnostic projects using de-identified data.",
+    "license_access_note": "Synthetic fixture for tests; not medical guidance.",
+    "content_hash": "sha256:med-paper-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-med-paper-001",
+    "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "med-data-001",
+    "provider": "fixture",
+    "source_type": "official_dataset",
+    "title": "De-identified hospital operations sample",
+    "authors_or_owners": ["Synthetic Public Health Agency"],
+    "published_at": "2025-05-08",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/med-data-001",
+    "query_id": "med-query-002",
+    "domain_tags": ["healthcare", "operations", "dataset"],
+    "abstract_or_snippet": "Synthetic public, de-identified operational data without patient-level clinical decisions.",
+    "license_access_note": "Synthetic fixture representing public de-identified data.",
+    "content_hash": "sha256:med-data-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-med-data-001",
+    "metadata_conflicts": {}
+  }
+]

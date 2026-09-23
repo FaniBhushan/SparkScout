@@ -1,0 +1,24 @@
+[
+  {
+    "schema_version": "1.0",
+    "chunk_id": "math-paper-001-c1",
+    "source_id": "math-paper-001",
+    "ordinal": 0,
+    "text": "Solver comparisons should report objective gap, runtime, and performance across repeated benchmark instances.",
+    "content_hash": "sha256:math-paper-001-c1",
+    "token_count": 14,
+    "start_offset": 0,
+    "end_offset": 103
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "math-repo-001-c1",
+    "source_id": "math-repo-001",
+    "ordinal": 0,
+    "text": "The examples use a Python-compatible open-source solver and include reproducible benchmark scripts.",
+    "content_hash": "sha256:math-repo-001-c1",
+    "token_count": 13,
+    "start_offset": 0,
+    "end_offset": 96
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "case_id": "robotics-agriculture-01",
+  "split": "development",
+  "description": "Normal constrained robotics request.",
+  "prompt": "We are two intermediate students looking for an agricultural robotics capstone. We have 30 days, laptops and webcams, and can use only public datasets and open-source software. Give us three final ideas.",
+  "expected_request": {
+    "schema_version": "1.0",
+    "domain": "robotics",
+    "time_limit_days": 30,
+    "interests": ["agriculture", "computer vision"],
+    "skill_level": "intermediate",
+    "team_size": 2,
+    "available_resources": ["laptop", "webcam", "open-source software"],
+    "excluded_topics": [],
+    "data_constraints": ["public datasets only"],
+    "desired_candidate_count": 12,
+    "finalist_count": 3,
+    "source_policy": {}
+  },
+  "fixture_set": "robotics_agriculture_01",
+  "expected": {
+    "outcome": "success",
+    "finalist_count": 3,
+    "required_source_types": ["scholarly_article", "official_dataset"],
+    "relevant_source_ids": ["rbt-paper-001", "rbt-data-001", "rbt-repo-001"],
+    "must_satisfy": ["fits 30 days", "uses public data", "does not require a physical robot"],
+    "forbidden_outcomes": ["private farm data is required", "industrial robot purchase is required"]
+  }
+}

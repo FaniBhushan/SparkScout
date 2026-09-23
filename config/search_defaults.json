@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "content_types": ["metadata", "abstract", "page_snippet", "dataset_description", "readme", "release_notes", "issue_excerpt"],
+  "presets": {
+    "balanced": {
+      "max_queries": 8,
+      "max_results_per_query": 10,
+      "max_sources": 40,
+      "minimum_source_count": 3,
+      "recency_days": 1825
+    },
+    "academic": {
+      "max_queries": 8,
+      "max_results_per_query": 10,
+      "max_sources": 40,
+      "minimum_source_count": 3,
+      "recency_days": 3650
+    },
+    "build-oriented": {
+      "max_queries": 8,
+      "max_results_per_query": 10,
+      "max_sources": 40,
+      "minimum_source_count": 3,
+      "recency_days": 1095
+    }
+  },
+  "hard_limits": {
+    "max_queries": 12,
+    "max_results_per_query": 20,
+    "max_sources": 60
+  }
+}

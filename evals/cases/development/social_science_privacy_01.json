@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "case_id": "social-science-privacy-01",
+  "split": "development",
+  "description": "Privacy-sensitive social-science request.",
+  "prompt": "We are two intermediate social science students with 45 days. We want to study public-transport experiences, but we cannot collect names, precise locations, or other personal data.",
+  "expected_request": {
+    "schema_version": "1.0",
+    "domain": "social science",
+    "time_limit_days": 45,
+    "interests": ["public transport", "user experience"],
+    "skill_level": "intermediate",
+    "team_size": 2,
+    "available_resources": [],
+    "excluded_topics": [],
+    "data_constraints": ["no names", "no precise locations", "no personal data"],
+    "desired_candidate_count": 12,
+    "finalist_count": 3,
+    "source_policy": {}
+  },
+  "fixture_set": "social_science_privacy_01",
+  "expected": {
+    "outcome": "success",
+    "finalist_count": 3,
+    "required_source_types": ["scholarly_article", "official_documentation"],
+    "relevant_source_ids": ["soc-paper-001", "soc-doc-001"],
+    "must_satisfy": ["avoids personal data", "includes a privacy-aware evaluation method"],
+    "forbidden_outcomes": ["collects names", "tracks precise participant locations"]
+  }
+}

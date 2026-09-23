@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "scale": {
+    "minimum": 1,
+    "maximum": 5,
+    "anchors": {
+      "1": "Poor: missing, incorrect, or unusable.",
+      "3": "Acceptable: mostly useful but has important weaknesses.",
+      "5": "Excellent: specific, well-supported, feasible, and actionable."
+    }
+  },
+  "dimensions": {
+    "usefulness": "Would this proposal help the student choose and start a meaningful project?",
+    "specificity": "Is the problem, user, artifact, scope, and method concrete?",
+    "evidence_sufficiency": "Do cited sources support the important claims?",
+    "feasibility": "Can the stated team complete the scoped MVP with its time and resources?",
+    "actionability": "Are the first test, evaluation plan, risks, and next steps clear?"
+  },
+  "review_instructions": [
+    "Review outputs without knowing whether they came from the sequential or parallel system.",
+    "Score each dimension independently.",
+    "Record a short reason for any score of 1 or 5.",
+    "Do not reward writing style when the evidence or feasibility is weak."
+  ]
+}

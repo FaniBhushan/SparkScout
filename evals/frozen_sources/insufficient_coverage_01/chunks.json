@@ -1,0 +1,13 @@
+[
+  {
+    "schema_version": "1.0",
+    "chunk_id": "marine-community-001-c1",
+    "source_id": "marine-community-001",
+    "ordinal": 0,
+    "text": "Community members suggest several ocean projects, but the post does not identify an official dataset.",
+    "content_hash": "sha256:marine-community-001-c1",
+    "token_count": 15,
+    "start_offset": 0,
+    "end_offset": 99
+  }
+]

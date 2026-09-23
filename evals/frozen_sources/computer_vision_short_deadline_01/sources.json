@@ -1,0 +1,40 @@
+[
+  {
+    "schema_version": "1.0",
+    "source_id": "cv-data-001",
+    "provider": "fixture",
+    "source_type": "official_dataset",
+    "title": "Small public object-image sample",
+    "authors_or_owners": ["Synthetic Vision Institute"],
+    "published_at": "2025-07-01",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/cv-data-001",
+    "query_id": "cv-query-001",
+    "domain_tags": ["computer vision", "dataset"],
+    "abstract_or_snippet": "A synthetic compact image dataset intended for CPU-based classroom exercises.",
+    "license_access_note": "Synthetic fixture representing an openly licensed dataset.",
+    "content_hash": "sha256:cv-data-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-cv-data-001",
+    "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "cv-repo-001",
+    "provider": "fixture",
+    "source_type": "code_repository",
+    "title": "CPU vision baseline notebook",
+    "authors_or_owners": ["Synthetic Open Source Team"],
+    "published_at": "2025-08-11",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/cv-repo-001",
+    "query_id": "cv-query-002",
+    "domain_tags": ["computer vision", "CPU"],
+    "abstract_or_snippet": "A synthetic lightweight feature-extraction baseline designed for ordinary laptops.",
+    "license_access_note": "Synthetic fixture representing an open-source repository.",
+    "content_hash": "sha256:cv-repo-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-cv-repo-001",
+    "metadata_conflicts": {}
+  }
+]

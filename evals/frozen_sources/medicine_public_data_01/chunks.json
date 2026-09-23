@@ -1,0 +1,24 @@
+[
+  {
+    "schema_version": "1.0",
+    "chunk_id": "med-paper-001-c1",
+    "source_id": "med-paper-001",
+    "ordinal": 0,
+    "text": "Student projects should prefer aggregate operational questions and explicitly avoid diagnosis or treatment recommendations.",
+    "content_hash": "sha256:med-paper-001-c1",
+    "token_count": 15,
+    "start_offset": 0,
+    "end_offset": 111
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "med-data-001-c1",
+    "source_id": "med-data-001",
+    "ordinal": 0,
+    "text": "The sample contains de-identified aggregate wait-time and service-volume fields for educational analysis.",
+    "content_hash": "sha256:med-data-001-c1",
+    "token_count": 15,
+    "start_offset": 0,
+    "end_offset": 104
+  }
+]

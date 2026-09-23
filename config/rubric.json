@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0",
+  "status": "provisional",
+  "default_preset": "balanced",
+  "criteria": {
+    "problem_value": {
+      "label": "Problem value",
+      "retrieval_focus": "user need impact and evidence that the problem matters"
+    },
+    "real_world_pain_point": {
+      "label": "Real-world pain point",
+      "retrieval_focus": "documented recurring difficulty for identifiable users current workarounds and their cost rather than a hypothetical problem"
+    },
+    "evidence_quality": {
+      "label": "Evidence quality",
+      "retrieval_focus": "quality and limitations of relevant evidence"
+    },
+    "novelty": {
+      "label": "Novelty and differentiation",
+      "retrieval_focus": "prior work comparable projects and open gaps"
+    },
+    "feasibility": {
+      "label": "Feasibility",
+      "retrieval_focus": "implementation scope time and resource requirements"
+    },
+    "data_tool_availability": {
+      "label": "Data and tool availability",
+      "retrieval_focus": "accessible datasets tools APIs hardware and licenses"
+    },
+    "technical_depth": {
+      "label": "Technical depth",
+      "retrieval_focus": "technical methods engineering challenges and alternatives"
+    },
+    "evaluation_clarity": {
+      "label": "Evaluation clarity",
+      "retrieval_focus": "benchmarks objective metrics and evaluation methods"
+    },
+    "constraint_fit": {
+      "label": "User constraint fit",
+      "retrieval_focus": "resource access and scope constraints"
+    },
+    "delivery_risk": {
+      "label": "Delivery risk",
+      "retrieval_focus": "known limitations dependencies and delivery risks"
+    }
+  },
+  "hard_gates": {
+    "user_constraints": "Does not violate a mandatory user constraint or exclusion.",
+    "evaluation_method": "Has a plausible evaluation method.",
+    "data_access": "Uses available and permitted data and resources.",
+    "evidence_sufficiency": "Has enough evidence for material feasibility claims.",
+    "time_scope": "Can be scoped to the user's delivery window."
+  },
+  "presets": {
+    "balanced": {
+      "problem_value": 10,
+      "real_world_pain_point": 10,
+      "evidence_quality": 12,
+      "novelty": 10,
+      "feasibility": 16,
+      "data_tool_availability": 12,
+      "technical_depth": 8,
+      "evaluation_clarity": 10,
+      "constraint_fit": 8,
+      "delivery_risk": 4
+    },
+    "feasibility-first": {
+      "problem_value": 8,
+      "real_world_pain_point": 8,
+      "evidence_quality": 9,
+      "novelty": 5,
+      "feasibility": 23,
+      "data_tool_availability": 17,
+      "technical_depth": 7,
+      "evaluation_clarity": 7,
+      "constraint_fit": 10,
+      "delivery_risk": 6
+    },
+    "innovation-first": {
+      "problem_value": 8,
+      "real_world_pain_point": 8,
+      "evidence_quality": 9,
+      "novelty": 22,
+      "feasibility": 10,
+      "data_tool_availability": 8,
+      "technical_depth": 18,
+      "evaluation_clarity": 10,
+      "constraint_fit": 5,
+      "delivery_risk": 2
+    },
+    "evidence-first": {
+      "problem_value": 8,
+      "real_world_pain_point": 10,
+      "evidence_quality": 22,
+      "novelty": 9,
+      "feasibility": 11,
+      "data_tool_availability": 10,
+      "technical_depth": 8,
+      "evaluation_clarity": 15,
+      "constraint_fit": 5,
+      "delivery_risk": 2
+    }
+  },
+  "retrieval": {
+    "top_k_per_criterion": 2,
+    "max_context_chunks": 12,
+    "max_context_tokens": 4000
+  }
+}

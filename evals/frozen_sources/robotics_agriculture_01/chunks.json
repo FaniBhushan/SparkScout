@@ -1,0 +1,35 @@
+[
+  {
+    "schema_version": "1.0",
+    "chunk_id": "rbt-paper-001-c1",
+    "source_id": "rbt-paper-001",
+    "ordinal": 0,
+    "text": "Fixed-camera crop monitoring can be evaluated with classification accuracy and inference time on laptop CPUs.",
+    "content_hash": "sha256:rbt-paper-001-c1",
+    "token_count": 17,
+    "start_offset": 0,
+    "end_offset": 112
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "rbt-data-001-c1",
+    "source_id": "rbt-data-001",
+    "ordinal": 0,
+    "text": "The benchmark contains public labeled crop images and permits non-commercial research use.",
+    "content_hash": "sha256:rbt-data-001-c1",
+    "token_count": 13,
+    "start_offset": 0,
+    "end_offset": 91
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "rbt-repo-001-c1",
+    "source_id": "rbt-repo-001",
+    "ordinal": 0,
+    "text": "The baseline runs inference on CPU and includes scripts for reproducible evaluation.",
+    "content_hash": "sha256:rbt-repo-001-c1",
+    "token_count": 13,
+    "start_offset": 0,
+    "end_offset": 84
+  }
+]
