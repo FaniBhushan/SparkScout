@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, PositiveInt
 
 from .common import ContractModel, Identifier, NonEmptyText
 from .critic_result import CriticResult
@@ -22,6 +22,18 @@ class RankedCandidate(ContractModel):
     gate_passed: bool
 
 
+class RetrievalIndexInfo(ContractModel):
+    """Auditable settings for the temporary index used by one run."""
+
+    backend: Literal["lexical_in_memory"] = "lexical_in_memory"
+    backend_version: Literal["1"] = "1"
+    indexed_chunk_count: PositiveInt
+    retrieval_top_k: PositiveInt
+    max_context_chunks: PositiveInt
+    max_context_tokens: PositiveInt
+    retention: Literal["run_only"] = "run_only"
+
+
 class OrchestrationResult(ContractModel):
     schema_version: Literal["1.0"] = "1.0"
     run_id: Identifier
@@ -30,6 +42,7 @@ class OrchestrationResult(ContractModel):
     scout: ScoutResult
     library: LibraryResult
     critic: CriticResult
+    retrieval_index: RetrievalIndexInfo | None = None
     source_manifest: list[SourceRecord] = Field(default_factory=list)
     ranking: list[RankedCandidate] = Field(default_factory=list)
     finalist_candidate_ids: list[Identifier] = Field(default_factory=list)

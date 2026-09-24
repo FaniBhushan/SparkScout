@@ -7,7 +7,7 @@ coordinator is actually started with a tracer.
 
 ```python
 from src.observability import RunTracer
-from src.workers.scout import ScoutWorker
+from src.workers.scout_worker import ScoutWorker
 
 tracer = RunTracer(run_id="run-001")
 try:
@@ -26,6 +26,14 @@ whether the limit was exceeded. When model usage is available, call
 `tracer.usage(stage, usage_record)` and record its token and cost budgets with
 `tracer.budget(stage, metric, used, limit)`. Set `console=False` to write only
 the JSONL file.
+
+Pass the same tracer to `LLMScoutQueryPlanner`, `LLMCandidateGenerator`,
+`LLMLibraryQueryPlanner`, and `LLMCandidateJudge`. Each model call records its
+model name and reported token counts, including responses that fail JSON
+validation. Supply `ModelPricing(input_per_million=..., output_per_million=...)`
+to `OpenAITextClient` to estimate USD cost. Without configured rates, cost is
+omitted from the JSON trace. `token_usage_available=false` means the provider
+did not report token counts; zero values in that event are placeholders.
 
 Trace events contain identifiers, counts, timing, and usage. Do not add prompts,
 retrieved text, API keys, or user-provided secrets to trace events. The

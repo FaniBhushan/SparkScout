@@ -8,7 +8,7 @@ from .evaluation_result import CriterionScore, EvaluationResult, HardGateResult
 from .final_proposal import AlternativeApproach, FinalProposal, ProposalEvaluationPlan
 from .input_request import InputRequest, SkillLevel
 from .library_result import LibraryResult
-from .orchestration_result import OrchestrationResult, RankedCandidate
+from .orchestration_result import OrchestrationResult, RankedCandidate, RetrievalIndexInfo
 from .resolved_search_configuration import ResolvedProvider, ResolvedSearchConfiguration
 from .search_defaults import SearchDefaults, SearchLimits, SearchPreset
 from .retrieved_chunk import RetrievedChunk
@@ -52,6 +52,7 @@ __all__ = [
     "SearchPreset",
     "RetrievalStatus",
     "RetrievedChunk",
+    "RetrievalIndexInfo",
     "GateJudgment",
     "ScoutQuery",
     "ScoutResult",

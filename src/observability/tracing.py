@@ -30,10 +30,15 @@ class _ConsoleFormatter(logging.Formatter):
                 f"remaining={data['remaining']}"
             )
         if event == "usage":
+            token_detail = (
+                f"prompt_tokens={data['prompt_tokens']} "
+                f"completion_tokens={data['completion_tokens']}"
+                if data.get("token_usage_available", True)
+                else "tokens=unreported"
+            )
             return (
-                f"{prefix} usage prompt_tokens={data['prompt_tokens']} "
-                f"completion_tokens={data['completion_tokens']} "
-                f"cost_usd={data['estimated_cost_usd']}"
+                f"{prefix} usage {token_detail} "
+                f"cost_usd={data.get('estimated_cost_usd', 'unconfigured')}"
             )
         details = [event]
         for key in ("provider_id", "query_id", "count", "duration_ms", "error_type"):
@@ -127,14 +132,14 @@ class RunTracer:
         *,
         task_id: str | None = None,
     ) -> None:
-        """Record aggregate model and provider use when a task finishes."""
+        """Record model and provider use for a task or individual call."""
 
         self._write(
             stage=stage,
             event="usage",
             task_id=task_id,
             span_id=self._active_span.get(),
-            **usage.model_dump(exclude={"schema_version", "models"}),
+            **usage.model_dump(exclude={"schema_version"}),
         )
 
     @contextmanager

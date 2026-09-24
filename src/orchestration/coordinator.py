@@ -22,11 +22,13 @@ from src.models import (
     ScoutResult,
     SourceRecord,
 )
+from src.models.orchestration_result import RetrievalIndexInfo
 from src.models.source_record import RetrievalStatus
 from src.observability import RunTracer
-from src.workers.critic import CriticWorker
-from src.workers.library import LibraryWorker
-from src.workers.scout import ScoutWorker
+from src.retrieval import InMemoryRetriever
+from src.workers.critic_worker import CriticWorker
+from src.workers.library_worker import LibraryWorker
+from src.workers.scout_worker import ScoutWorker
 
 
 RunMode = Literal["sequential", "parallel"]
@@ -113,6 +115,7 @@ class Orchestrator:
                 critic_result = CriticResult(
                     warnings=["Critic skipped because minimum Library coverage was not met."]
                 )
+                retrieval_index = None
                 if self.tracer:
                     self.tracer.event("orchestrator", "critic_skipped", task_id=run_id)
             else:
@@ -121,9 +124,23 @@ class Orchestrator:
                     if self.tracer
                     else nullcontext()
                 ):
+                    retriever = None
                     try:
+                        retriever = InMemoryRetriever(library_result.chunks)
+                        retrieval_index = RetrievalIndexInfo(
+                            indexed_chunk_count=len(library_result.chunks),
+                            retrieval_top_k=rubric.retrieval_top_k,
+                            max_context_chunks=rubric.max_context_chunks,
+                            max_context_tokens=rubric.max_context_tokens,
+                        )
+                        if self.tracer:
+                            self.tracer.event(
+                                "retrieval_index", "index_created",
+                                task_id=run_id, count=retrieval_index.indexed_chunk_count,
+                            )
+                        run_critic = self.critic.with_retriever(retriever)
                         critic_result = CriticResult.model_validate(
-                            await self.critic.run(
+                            await run_critic.run(
                                 request.model_copy(deep=True),
                                 [candidate.model_copy(deep=True) for candidate in scout_result.candidates],
                                 library_result.model_copy(deep=True),
@@ -132,6 +149,11 @@ class Orchestrator:
                         )
                     except Exception as error:
                         raise OrchestrationError("critic", error) from error
+                    finally:
+                        if self.tracer and retriever is not None:
+                            self.tracer.event(
+                                "retrieval_index", "index_scope_ended", task_id=run_id
+                            )
 
             rankings = (
                 []
@@ -168,6 +190,7 @@ class Orchestrator:
                 scout=scout_result,
                 library=library_result,
                 critic=critic_result,
+                retrieval_index=retrieval_index,
                 source_manifest=source_manifest,
                 ranking=rankings,
                 finalist_candidate_ids=finalists,

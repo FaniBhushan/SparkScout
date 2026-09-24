@@ -20,7 +20,8 @@ class UsageRecord(ContractModel):
     search_calls: NonNegativeInt = 0
     prompt_tokens: NonNegativeInt = 0
     completion_tokens: NonNegativeInt = 0
+    token_usage_available: bool = True
     embedding_tokens: NonNegativeInt = 0
-    estimated_cost_usd: NonNegativeCost = 0
+    estimated_cost_usd: NonNegativeCost | None = None
     cache_hits: NonNegativeInt = 0
     sources_captured: NonNegativeInt = 0

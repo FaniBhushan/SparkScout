@@ -18,8 +18,8 @@ from src.models import (
 from src.models.common import EvidenceReference
 from src.models.source_record import RetrievalStatus
 from src.retrieval import InMemoryRetriever
-from src.workers.critic import CriticWorker
-from src.workers.library import LibraryWorker
+from src.workers.critic_worker import CriticWorker
+from src.workers.library_worker import LibraryWorker
 
 
 class Planner:
@@ -77,7 +77,11 @@ class LibraryCriticTests(unittest.TestCase):
         self.request = InputRequest(domain="AI engineering", time_limit_days=30)
         self.search = ResolvedSearchConfiguration(
             domain="AI engineering",
-            providers=[{"provider_id": "fixture", "source_types": ["dataset"]}],
+            providers=[{
+                "provider_id": "fixture",
+                "source_types": ["dataset"],
+                "content_types": ["text"],
+            }],
             content_types=["text"],
             max_queries=2,
             max_results_per_query=2,

@@ -41,3 +41,16 @@ coordinator/UI.
 The catalog describes available choices; it does not install adapters or enable
 network access by itself. Synthetic fixtures remain test data and should not be
 presented as real evidence.
+
+Use `resolve_search_configuration(request, ready_adapters, preset_name="balanced")`
+from `src.configuration` before starting either research worker. Pass a mapping
+of initialized, usable adapters keyed by provider ID. The resolver keeps only
+enabled providers for the request's domain, applies the route and source policy,
+and rejects unavailable required source types. `requested_limits=SearchLimits(...)`
+can override preset counts within the operator's hard limits.
+
+The resolver does not yet enforce `max_records_by_type`, so it rejects requests
+that set those caps. Preset `recency_days` is not yet applied by the query and
+adapter layers. `src/application.py` now calls the resolver before constructing
+the workers; `src/cli.py` supplies only a frozen adapter. A future UI can call
+the same application function with its chosen ready adapters.

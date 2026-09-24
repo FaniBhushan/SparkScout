@@ -17,16 +17,22 @@ relevant PR or evaluation report.
 
 ## Make one complete run work — next
 
-- [ ] Connect an LLM client to Scout query planning, candidate generation, Library
+- [x] Connect an LLM client to Scout query planning, candidate generation, Library
       query planning, and Critic assessment; validate every raw response with the
       matching Pydantic contract and record token/cost usage.
 - [ ] Resolve source registry, domain route, preset, user source policy, and hard
       limits into one `ResolvedSearchConfiguration`; select only available adapters.
+      The frozen-fixture application path now calls the resolver; per-type record
+      caps and live adapter assembly remain open.
 - [ ] Build a run-scoped retrieval index from Library chunks and give each run its
       own Critic retriever. Record index settings and retention behavior.
+      The lexical in-memory baseline is run-scoped and recorded; vector/hybrid
+      indexing and configured corpus/index-size limits remain open.
 - [ ] Produce complete, cited `FinalProposal` records for selected candidates.
 - [ ] Add a runnable frozen-fixture entry point that accepts a structured request
       and returns proposals or an explicit coverage failure.
+      A CLI now returns ranked `OrchestrationResult` JSON or coverage status;
+      final proposals remain open.
 
 ## User configuration and interface
 
@@ -36,9 +42,9 @@ relevant PR or evaluation report.
 - [ ] Build Advanced mode for providers, source/content types, budgets, and exact
       criterion weights; validate against operator limits.
 - [ ] Show run progress, selected sources, budgets, scores, and citations in the UI.
-
+- [ ] Build the CLI as well.
 ## Reliability and evaluation
-
+- [ ] Enforce input and output guard rails.
 - [ ] Enforce provider request, run time, token, and cost limits; handle timeouts,
       rate limits, branch failures, malformed model output, and empty retrieval.
 - [ ] Add versioned run manifests, atomic checkpoints/resume, and safe caching.
@@ -48,3 +54,7 @@ relevant PR or evaluation report.
       with the same frozen cases and limits.
 - [ ] Add human review results, failure analysis, reproduction commands, known
       limitations, and a short demo to the project documentation.
+
+## Submission readiness
+- [ ] Make the code readable and good quality with best practices.
+- [ ] Add good comment documentation throughout.

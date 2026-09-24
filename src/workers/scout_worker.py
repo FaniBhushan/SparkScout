@@ -1,4 +1,4 @@
-"""Search approved sources and return candidate ideas for later evaluation."""
+"""Scout worker: search approved sources and return candidate ideas."""
 
 from __future__ import annotations
 
@@ -162,17 +162,17 @@ class ScoutWorker:
         if len({query.query_id for query in queries}) != len(queries):
             raise ValueError("query IDs must be unique")
 
-        allowed = {
-            provider.provider_id: set(provider.source_types)
-            for provider in search.providers
-        }
-        available_content = set(search.content_types)
+        allowed = {provider.provider_id: provider for provider in search.providers}
         for query in queries:
             if query.provider_id not in allowed or query.provider_id not in self.adapters:
                 raise ValueError(f"no approved adapter for provider {query.provider_id!r}")
-            if not set(query.source_types).issubset(allowed[query.provider_id]):
+            provider = allowed[query.provider_id]
+            if not set(query.source_types).issubset(provider.source_types):
                 raise ValueError(f"query {query.query_id!r} requests an unavailable source type")
-            if not set(query.content_types).issubset(available_content):
-                raise ValueError(f"query {query.query_id!r} requests an unavailable content type")
+            if not set(query.content_types).issubset(provider.content_types):
+                raise ValueError(
+                    f"query {query.query_id!r} requests an unavailable content type "
+                    f"from provider {query.provider_id!r}"
+                )
             if query.max_results > search.max_results_per_query:
                 raise ValueError(f"query {query.query_id!r} exceeds max_results_per_query")

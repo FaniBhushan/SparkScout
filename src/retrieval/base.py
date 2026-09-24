@@ -17,7 +17,8 @@ class InMemoryRetriever:
     """Simple run-scoped retrieval; replaceable with a hybrid index later."""
 
     def __init__(self, chunks: list[SourceChunk]) -> None:
-        self.chunks = list(chunks)
+        # Snapshot the corpus so later Library mutations cannot alter this run's index.
+        self.chunks = [chunk.model_copy(deep=True) for chunk in chunks]
 
     async def search(self, query: str, top_k: int) -> list[RetrievedChunk]:
         if top_k < 1:

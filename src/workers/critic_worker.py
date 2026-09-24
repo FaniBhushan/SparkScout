@@ -1,4 +1,4 @@
-"""Evaluate candidates against bounded evidence and a configurable rubric."""
+"""Critic worker: evaluate candidates against evidence and a rubric."""
 
 from __future__ import annotations
 
@@ -43,6 +43,11 @@ class CriticWorker:
         self.retriever = retriever
         self.judge = judge
         self.tracer = tracer
+
+    def with_retriever(self, retriever: Retriever) -> "CriticWorker":
+        """Use the same judge and tracing setup with a run-specific index."""
+
+        return CriticWorker(retriever, self.judge, self.tracer)
 
     async def run(
         self,
