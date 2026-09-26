@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
+from datetime import date
 from pathlib import Path
 
 from src.adapters.base import SourceAdapter
 from src.models import (
     InputRequest,
+    BudgetPolicy,
     ResolvedProvider,
     ResolvedSearchConfiguration,
     SearchDefaults,
@@ -32,6 +34,12 @@ def load_search_defaults(path: Path = CONFIG_DIR / "search_defaults.json") -> Se
 
     data = json.loads(path.read_text(encoding="utf-8"))
     return SearchDefaults.model_validate(data)
+
+
+def load_budget_policy(path: Path = CONFIG_DIR / "budgets.json") -> BudgetPolicy:
+    """Load run defaults and operator ceilings for time, tokens, and cost."""
+
+    return BudgetPolicy.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 def resolve_search_configuration(
@@ -77,8 +85,6 @@ def resolve_search_configuration(
     unknown_types = mentioned_types - known_types
     if unknown_types:
         raise ValueError(f"unknown source types: {sorted(unknown_types)}")
-    if policy.max_records_by_type:
-        raise ValueError("max_records_by_type is not yet supported by search workers")
 
     route = sources.routes.get(domain_key)
     allowed_types = (set(policy.include_types) or known_types) - set(policy.exclude_types)
@@ -135,6 +141,32 @@ def resolve_search_configuration(
     if missing_types:
         raise ValueError(f"no available provider for required source types: {sorted(missing_types)}")
 
+    unselected_caps = set(policy.max_records_by_type) - covered_types
+    if unselected_caps:
+        raise ValueError(f"record caps reference unavailable source types: {sorted(unselected_caps)}")
+    if any(cap > limits.max_sources for cap in policy.max_records_by_type.values()):
+        raise ValueError("per-type record caps cannot exceed max_sources")
+    # Catalog values are defaults; an explicit request can tighten or raise them
+    # within the run's overall source ceiling.
+    type_caps = {
+        source_type: min(
+            policy.max_records_by_type.get(
+                source_type, sources.source_types[source_type].default_max_records
+            ),
+            limits.max_sources,
+        )
+        for source_type in sorted(covered_types)
+    }
+    # A type can be stricter than its preset (for example, recent repositories).
+    # Preserve the reference date so both branches apply the same age decision.
+    age_limits = {
+        source_type: min(
+            preset.recency_days,
+            sources.source_types[source_type].default_max_age_days or preset.recency_days,
+        )
+        for source_type in sorted(covered_types)
+    }
+
     content_types = list(
         dict.fromkeys(item for provider in selected for item in provider.content_types)
     )
@@ -146,4 +178,8 @@ def resolve_search_configuration(
         max_results_per_query=limits.max_results_per_query,
         max_sources=limits.max_sources,
         minimum_source_count=preset.minimum_source_count,
+        max_records_by_type=type_caps,
+        required_source_types=sorted(required_types),
+        max_age_days_by_type=age_limits,
+        as_of_date=date.today(),
     )

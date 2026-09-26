@@ -17,9 +17,9 @@ finally:
     tracer.close()
 ```
 
-The example belongs inside the future async coordinator, where `adapters`,
-`query_planner`, `candidate_generator`, `request`, and `resolved_search` are
-created. Pass the same tracer to other workers as they are implemented. Each
+This is a single-worker example. For a complete structured run, pass `tracer`
+to `run_research(request, llm_client, adapters, tracer=tracer)` and close it
+afterward. Each
 span records start, end or error, elapsed milliseconds, and a span ID. Budget
 events record used, limit, remaining, and
 whether the limit was exceeded. When model usage is available, call
@@ -28,7 +28,7 @@ whether the limit was exceeded. When model usage is available, call
 the JSONL file.
 
 Pass the same tracer to `LLMScoutQueryPlanner`, `LLMCandidateGenerator`,
-`LLMLibraryQueryPlanner`, and `LLMCandidateJudge`. Each model call records its
+`LLMLibraryQueryPlanner`, `LLMCandidateJudge`, and `LLMProposalWriter`. Each model call records its
 model name and reported token counts, including responses that fail JSON
 validation. Supply `ModelPricing(input_per_million=..., output_per_million=...)`
 to `OpenAITextClient` to estimate USD cost. Without configured rates, cost is
@@ -37,5 +37,10 @@ did not report token counts; zero values in that event are placeholders.
 
 Trace events contain identifiers, counts, timing, and usage. Do not add prompts,
 retrieved text, API keys, or user-provided secrets to trace events. The
-coordinator remains responsible for enforcing budgets; the tracer records what
-was used.
+application budget guard enforces run-wide time, model-token, normalized-source-
+byte, and provider-call limits; the tracer records what was used. Streamlit subscribes to bounded
+stage events for a progress display without logging prompts or source text.
+Cost enforcement is available only
+when a cost cap and trusted per-model rates are configured. An in-flight API
+call may still incur charges if its run is cancelled or actual usage exceeds
+its pre-call estimate.

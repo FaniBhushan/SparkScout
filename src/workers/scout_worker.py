@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping
 from contextlib import nullcontext
 from typing import Protocol
@@ -17,6 +18,8 @@ from src.models import (
 )
 from src.models.source_record import RetrievalStatus
 from src.observability import RunTracer
+from src.workers.source_filter import source_is_within_age_limit
+from src.workers.upload_query import include_upload_query
 
 
 class ScoutQueryPlanner(Protocol):
@@ -71,21 +74,33 @@ class ScoutWorker:
         if request.domain.casefold() != search.domain.casefold():
             raise ValueError("request and resolved search domains must match")
 
-        queries = await self.query_planner.plan(request, search)
+        queries = include_upload_query(await self.query_planner.plan(request, search), search, ScoutQuery)
         self._validate_queries(queries, search)
         if self.tracer:
             self.tracer.budget("scout", "search_queries", len(queries), search.max_queries)
 
         sources: list[SourceRecord] = []
         seen_sources: dict[str, SourceRecord] = {}
+        type_counts: Counter[str] = Counter()
         search_calls = 0
         for query in queries:
             remaining = search.max_sources - len(sources)
             if remaining <= 0:
                 break
 
+            source_types = [
+                source_type for source_type in query.source_types
+                if type_counts[source_type]
+                < search.max_records_by_type.get(source_type, search.max_sources)
+            ]
+            if not source_types:
+                continue
+
             bounded_query = query.model_copy(
-                update={"max_results": min(query.max_results, remaining)}
+                update={
+                    "max_results": min(query.max_results, remaining),
+                    "source_types": source_types,
+                }
             )
             trace_span = (
                 self.tracer.span(
@@ -114,12 +129,19 @@ class ScoutWorker:
             for source in results:
                 if source.provider != query.provider_id or source.query_id != query.query_id:
                     raise ValueError("adapter returned a source for the wrong provider or query")
-                if source.source_type not in query.source_types:
+                if source.source_type not in bounded_query.source_types:
                     raise ValueError("adapter returned an unrequested source type")
+                if not source_is_within_age_limit(source, search):
+                    continue
                 previous = seen_sources.get(source.source_id)
                 if previous is None:
+                    if type_counts[source.source_type] >= search.max_records_by_type.get(
+                        source.source_type, search.max_sources
+                    ):
+                        continue
                     sources.append(source)
                     seen_sources[source.source_id] = source
+                    type_counts[source.source_type] += 1
                 elif previous != source:
                     raise ValueError(
                         f"conflicting records have the same source ID {source.source_id!r}"

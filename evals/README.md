@@ -15,22 +15,28 @@ same evidence to every system variant.
 - `human_scores/template.csv` is copied and completed by reviewers.
 - `reports/` is for generated results and is ignored by Git.
 
-## How a case is used
+## Current use and next evaluation step
 
-1. Load a case JSON file.
-2. Pass `prompt` to the request extractor.
-3. Compare the normalized request with `expected_request`.
-4. If `fixture_set` is present, load its `sources.json` and `chunks.json` through
-   the fixture adapter.
-5. Run the sequential or parallel pipeline.
-6. Check `expected` rules, including outcome, citations, source types, and
-   forbidden results.
-7. Save machine metrics to `reports/`. Human reviewers separately score the
-   output using the rubric and CSV template.
+`validate.py` checks dataset structure, paths, references, and synthetic labels;
+it does not run research or score proposals. The CLI can run one case with its
+frozen fixture and `expected_request`:
+
+```sh
+python -m src.cli --case evals/cases/development/ai_engineering_capstone_01.json --offline-demo
+```
+
+This deterministic demo reports `insufficient_coverage` because the case asks
+for more candidates than the demo model creates. It does not test prompt
+interpretation or real-world proposal quality. With `--model`, the same case
+uses an LLM and may incur API charges. A batch evaluation runner is still
+needed to compare each output with the case's `expected` rules, measure quality,
+latency, and cost, and save reports. Prompt-to-request extraction needs its own
+comparison with `expected_request`. Human reviewers can score proposals with
+`rubrics/proposal_quality.json` and `human_scores/template.csv`.
 
 Exact proposal text is intentionally not part of the gold data. Many proposals
-can be correct; deterministic rules check correctness, while the rubric measures
-quality. Do not tune prompts against `cases/held_out/`.
+can be correct; the planned deterministic checks will test constraints, while
+the rubric measures quality. Do not tune prompts against `cases/held_out/`.
 
 The offline adapter is `src.adapters.FrozenFixtureAdapter`. Create it with a case's
 `fixture_set` value, then register it under the `frozen_fixture` provider ID. It

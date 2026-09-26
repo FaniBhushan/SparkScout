@@ -18,13 +18,14 @@ are rejected. The scoring formula is `score / 5 * weight`, summed to a 0–100 t
 candidate even if its numeric score is high; final ranking belongs to the
 orchestrator.
 
-Library searches independently from Scout and stores one short, retrievable chunk
-per usable source snippet. Critic asks the retriever for evidence relevant to each
-criterion, limits the combined context, asks an injected judge for 0–5 judgments,
-and computes weighted totals deterministically. It rejects citations outside the
-retrieved context. The included `InMemoryRetriever` is a deterministic lexical
-starting point, not a semantic or hybrid search index. Provider adapters, query
-planners, and the judge still need concrete implementations for live runs.
+Library searches independently from Scout. Live GitHub/Tavily results provide
+metadata and short snippets; confirmed user uploads can provide extracted text.
+The run-scoped hybrid index splits available text under configured limits.
+Critic retrieves per criterion, bounds the combined context, asks an injected
+judge for 0–5 judgments, and computes weighted totals deterministically. It
+rejects citations outside the retrieved context. The local TF-IDF vectors are
+deterministic and cost no embedding API tokens, but do not provide semantic
+sentence-embedding retrieval.
 
 `evals/rubrics/proposal_quality.json` is separate: it guides evaluation of the
 *final proposal*, not candidate ranking. Run focused checks with

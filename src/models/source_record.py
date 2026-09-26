@@ -29,10 +29,13 @@ class SourceRecord(ContractModel):
     authors_or_owners: list[NonEmptyText] = Field(default_factory=list)
     published_at: date | datetime | None = None
     captured_at: datetime
-    canonical_url: HttpUrl
+    canonical_url: HttpUrl | None = None
     query_id: Identifier
     domain_tags: list[NonEmptyText] = Field(default_factory=list)
     abstract_or_snippet: NonEmptyText | None = None
+    language: str | None = Field(default=None, pattern=r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$")
+    # Retained only in memory until Library builds chunks; never serialized into manifests.
+    full_text: str | None = Field(default=None, exclude=True, repr=False)
     license_access_note: NonEmptyText | None = None
     content_hash: NonEmptyText
     retrieval_status: RetrievalStatus
@@ -46,6 +49,7 @@ class SourceChunk(ContractModel):
     source_id: Identifier
     ordinal: NonNegativeInt
     text: NonEmptyText
+    text_redacted: bool = False
     content_hash: NonEmptyText
     token_count: PositiveInt | None = None
     start_offset: NonNegativeInt | None = None

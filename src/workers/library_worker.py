@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping
 from contextlib import nullcontext
 from hashlib import sha256
@@ -11,6 +12,8 @@ from src.adapters.base import SourceAdapter
 from src.models import InputRequest, LibraryResult, ResolvedSearchConfiguration, SourceQuery
 from src.models.source_record import RetrievalStatus, SourceChunk, SourceRecord
 from src.observability import RunTracer
+from src.workers.source_filter import source_is_within_age_limit
+from src.workers.upload_query import include_upload_query
 
 
 class LibraryQueryPlanner(Protocol):
@@ -44,18 +47,29 @@ class LibraryWorker:
         if request.domain.casefold() != search.domain.casefold():
             raise ValueError("request and resolved search domains must match")
 
-        queries = await self.query_planner.plan(request, search)
+        queries = include_upload_query(await self.query_planner.plan(request, search), search, SourceQuery)
         self._validate_queries(queries, search)
         if self.tracer:
             self.tracer.budget("library", "search_queries", len(queries), search.max_queries)
 
         sources: list[SourceRecord] = []
         seen: dict[str, SourceRecord] = {}
+        type_counts: Counter[str] = Counter()
         for query in queries:
             remaining = search.max_sources - len(sources)
             if remaining <= 0:
                 break
-            bounded = query.model_copy(update={"max_results": min(query.max_results, remaining)})
+            source_types = [
+                source_type for source_type in query.source_types
+                if type_counts[source_type]
+                < search.max_records_by_type.get(source_type, search.max_sources)
+            ]
+            if not source_types:
+                continue
+            bounded = query.model_copy(update={
+                "max_results": min(query.max_results, remaining),
+                "source_types": source_types,
+            })
             with (
                 self.tracer.span(
                     "library_source_search",
@@ -71,12 +85,19 @@ class LibraryWorker:
             for source in results:
                 if source.provider != query.provider_id or source.query_id != query.query_id:
                     raise ValueError("adapter returned a source for the wrong provider or query")
-                if source.source_type not in query.source_types:
+                if source.source_type not in bounded.source_types:
                     raise ValueError("adapter returned an unrequested source type")
+                if not source_is_within_age_limit(source, search):
+                    continue
                 previous = seen.get(source.source_id)
                 if previous is None:
+                    if type_counts[source.source_type] >= search.max_records_by_type.get(
+                        source.source_type, search.max_sources
+                    ):
+                        continue
                     sources.append(source)
                     seen[source.source_id] = source
+                    type_counts[source.source_type] += 1
                 elif previous != source:
                     raise ValueError(f"conflicting records have source ID {source.source_id!r}")
             if self.tracer:
@@ -87,15 +108,15 @@ class LibraryWorker:
                 chunk_id=f"{source.source_id}-c0",
                 source_id=source.source_id,
                 ordinal=0,
-                text=source.abstract_or_snippet,
-                content_hash=sha256(source.abstract_or_snippet.encode("utf-8")).hexdigest(),
-                token_count=max(1, len(source.abstract_or_snippet) // 4),
+                text=source.full_text or source.abstract_or_snippet,
+                content_hash=sha256((source.full_text or source.abstract_or_snippet).encode("utf-8")).hexdigest(),
+                token_count=max(1, len(source.full_text or source.abstract_or_snippet) // 4),
                 start_offset=0,
-                end_offset=len(source.abstract_or_snippet),
+                end_offset=len(source.full_text or source.abstract_or_snippet),
             )
             for source in sources
             if source.retrieval_status in (RetrievalStatus.SUCCESS, RetrievalStatus.PARTIAL)
-            and source.abstract_or_snippet
+            and (source.full_text or source.abstract_or_snippet)
         ]
         warnings = []
         if not chunks:

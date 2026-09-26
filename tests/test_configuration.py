@@ -33,6 +33,8 @@ class SearchResolutionTests(unittest.TestCase):
         self.assertEqual(resolved.content_types, ["metadata", "page_snippet"])
         self.assertEqual((resolved.max_queries, resolved.max_sources), (8, 40))
         self.assertEqual(resolved.minimum_source_count, 3)
+        self.assertEqual(resolved.max_age_days_by_type["code_repository"], 1095)
+        self.assertIsNotNone(resolved.as_of_date)
         self.assertEqual(resolved.domain, self.request.domain)
 
     def test_unavailable_adapter_and_excluded_type_are_removed(self) -> None:
@@ -62,6 +64,7 @@ class SearchResolutionTests(unittest.TestCase):
             [provider.provider_id for provider in resolved.providers],
             ["github", "tavily"],
         )
+        self.assertEqual(resolved.required_source_types, ["web_article"])
 
     def test_missing_required_type_fails_before_research(self) -> None:
         request = self.request.model_copy(
@@ -112,14 +115,26 @@ class SearchResolutionTests(unittest.TestCase):
             (4, 5, 12),
         )
 
-    def test_per_type_record_caps_are_rejected_until_workers_can_enforce_them(self) -> None:
+    def test_per_type_record_caps_override_catalog_defaults(self) -> None:
         request = self.request.model_copy(
             update={"source_policy": self.request.source_policy.model_copy(
                 update={"max_records_by_type": {"web_article": 2}}
             )}
         )
 
-        with self.assertRaisesRegex(ValueError, "max_records_by_type"):
+        resolved = resolve_search_configuration(request, self.adapters)
+
+        self.assertEqual(resolved.max_records_by_type["web_article"], 2)
+        self.assertEqual(resolved.max_records_by_type["code_repository"], 10)
+
+    def test_record_cap_for_unavailable_type_is_rejected(self) -> None:
+        request = self.request.model_copy(
+            update={"source_policy": self.request.source_policy.model_copy(
+                update={"max_records_by_type": {"official_dataset": 2}}
+            )}
+        )
+
+        with self.assertRaisesRegex(ValueError, "unavailable source types"):
             resolve_search_configuration(request, self.adapters)
 
 

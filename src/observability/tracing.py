@@ -11,7 +11,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Iterator
+from typing import Callable, Iterator
 from uuid import uuid4
 
 from src.models.usage_record import UsageRecord
@@ -56,11 +56,13 @@ class RunTracer:
         log_dir: Path | str = "runs",
         *,
         console: bool = True,
+        on_record: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", run_id):
             raise ValueError("run_id must be a safe file name")
 
         self.run_id = run_id
+        self.on_record = on_record
         self.trace_path = Path(log_dir) / run_id / "trace.jsonl"
         self.trace_path.parent.mkdir(parents=True, exist_ok=True)
         self._active_span: ContextVar[str | None] = ContextVar(
@@ -216,3 +218,9 @@ class RunTracer:
         if event == "budget" and record.get("exceeded"):
             level = logging.WARNING
         self._logger.log(level, json.dumps(record, allow_nan=False, separators=(",", ":")))
+        if self.on_record is not None:
+            try:
+                self.on_record(record)
+            except Exception:
+                # A presentation subscriber must not stop or alter research.
+                logging.getLogger(__name__).warning("trace progress callback failed")

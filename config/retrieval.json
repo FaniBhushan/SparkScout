@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "backend": "hybrid_tfidf_in_memory",
+  "backend_version": "1",
+  "embedding_model": "local_tfidf",
+  "embedding_version": "1",
+  "chunk_size_chars": 1800,
+  "chunk_overlap_chars": 180,
+  "max_corpus_chars": 120000,
+  "max_chunks": 120,
+  "max_index_bytes": 1000000,
+  "retention": "run_only"
+}

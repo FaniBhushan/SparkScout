@@ -25,7 +25,7 @@ from src.models import (
 from src.models.orchestration_result import RetrievalIndexInfo
 from src.models.source_record import RetrievalStatus
 from src.observability import RunTracer
-from src.retrieval import InMemoryRetriever
+from src.retrieval import HybridInMemoryRetriever, load_retrieval_index_configuration
 from src.workers.critic_worker import CriticWorker
 from src.workers.library_worker import LibraryWorker
 from src.workers.scout_worker import ScoutWorker
@@ -126,9 +126,25 @@ class Orchestrator:
                 ):
                     retriever = None
                     try:
-                        retriever = InMemoryRetriever(library_result.chunks)
+                        settings = load_retrieval_index_configuration()
+                        corpus_chars = sum(len(chunk.text) for chunk in library_result.chunks)
+                        retriever = HybridInMemoryRetriever(library_result.chunks, settings)
+                        # The audit output must contain the exact chunks indexed for Critic.
+                        library_result = LibraryResult(
+                            sources=library_result.sources,
+                            chunks=retriever.chunks,
+                            warnings=library_result.warnings,
+                        )
                         retrieval_index = RetrievalIndexInfo(
-                            indexed_chunk_count=len(library_result.chunks),
+                            index_id=f"{run_id}:library",
+                            indexed_chunk_count=len(retriever.chunks),
+                            corpus_chars=corpus_chars,
+                            index_bytes_estimate=retriever.index_bytes,
+                            chunk_size_chars=settings.chunk_size_chars,
+                            chunk_overlap_chars=settings.chunk_overlap_chars,
+                            max_corpus_chars=settings.max_corpus_chars,
+                            max_chunks=settings.max_chunks,
+                            max_index_bytes=settings.max_index_bytes,
                             retrieval_top_k=rubric.retrieval_top_k,
                             max_context_chunks=rubric.max_context_chunks,
                             max_context_tokens=rubric.max_context_tokens,
@@ -273,7 +289,8 @@ class Orchestrator:
                 f"at least {search.minimum_source_count} are required."
             )
         available_types = {source.source_type for source in usable_sources}
-        missing_types = sorted(set(request.source_policy.required_types) - available_types)
+        required_types = set(search.required_source_types) | set(request.source_policy.required_types)
+        missing_types = sorted(required_types - available_types)
         if missing_types:
             warnings.append(
                 "Library did not find required source types: " + ", ".join(missing_types) + "."

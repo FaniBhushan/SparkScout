@@ -64,6 +64,13 @@
       "prohibited_uses": ["real_world_evidence", "empirical_claims"],
       "default_max_records": 100,
       "default_max_age_days": null
+    },
+    "user_document": {
+      "evidence_tier": "user_supplied",
+      "allowed_uses": ["user_context", "evaluation", "prior_work"],
+      "prohibited_uses": ["independently_verified_evidence"],
+      "default_max_records": 5,
+      "default_max_age_days": null
     }
   },
   "providers": {
@@ -126,6 +133,17 @@
       "credential_env_vars": [],
       "timeout_seconds": 5,
       "max_requests_per_run": 20
+    },
+    "user_upload": {
+      "adapter": "user_upload",
+      "enabled": true,
+      "emits": ["user_document"],
+      "capabilities": ["metadata", "licensed_full_text"],
+      "domains": ["*"],
+      "credential_env_vars": [],
+      "timeout_seconds": 5,
+      "max_requests_per_run": 2,
+      "supports_language": true
     }
   },
   "routes": {}

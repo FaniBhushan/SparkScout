@@ -15,6 +15,7 @@ class EvidenceTier(str, Enum):
     SCHOLARLY = "scholarly"
     OPPORTUNITY = "opportunity"
     SYNTHETIC = "synthetic"
+    USER_SUPPLIED = "user_supplied"
 
 
 class SourcePolicy(ContractModel):
@@ -56,6 +57,7 @@ class ProviderDefinition(ContractModel):
     credential_env_vars: list[Identifier] = Field(default_factory=list)
     timeout_seconds: PositiveFloat = 30
     max_requests_per_run: PositiveInt = 10
+    supports_language: bool = False
 
 
 class DomainRoute(ContractModel):

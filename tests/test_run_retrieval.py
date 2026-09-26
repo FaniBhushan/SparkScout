@@ -129,7 +129,8 @@ class RunRetrievalTests(unittest.IsolatedAsyncioTestCase):
                 })
                 self.assertNotEqual(first.run_id, second.run_id)
                 self.assertEqual(first.retrieval_index.indexed_chunk_count, 1)
-                self.assertEqual(second.retrieval_index.backend, "lexical_in_memory")
+                self.assertEqual(second.retrieval_index.backend, "hybrid_tfidf_in_memory")
+                self.assertEqual(second.retrieval_index.embedding_model, "local_tfidf")
                 self.assertEqual(second.retrieval_index.retention, "run_only")
                 self.assertEqual(second.retrieval_index.retrieval_top_k, self.rubric.retrieval_top_k)
                 self.assertEqual(template_critic.retriever.chunks, [])
@@ -146,6 +147,24 @@ class RunRetrievalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "insufficient_coverage")
         self.assertIsNone(result.retrieval_index)
         self.assertEqual(judge.evidence_by_topic, {})
+
+    async def test_domain_required_type_is_checked_at_join(self):
+        judge = RecordingJudge()
+        coordinator = Orchestrator(
+            Scout(), Library(), CriticWorker(InMemoryRetriever([]), judge)
+        )
+        search = self.search.model_copy(update={
+            "providers": [self.search.providers[0].model_copy(update={
+                "source_types": ["dataset", "code_repository"]
+            })],
+            "required_source_types": ["code_repository"],
+        })
+
+        result = await coordinator.run(self.request("alpha"), search, self.rubric)
+
+        self.assertEqual(result.status, "insufficient_coverage")
+        self.assertTrue(any("code_repository" in warning for warning in result.warnings))
+        self.assertIsNone(result.retrieval_index)
 
     async def test_concurrent_runs_on_one_coordinator_keep_indexes_separate(self):
         judge = RecordingJudge()

@@ -22,6 +22,8 @@ progress in `TASKS.md` and follow the product requirements in
   model prompt templates. `src/adapters/` contains provider-specific search code.
 - `src/retrieval/`, `src/evaluation/`, and `src/observability/` hold retrieval,
   rubric loading, and run tracing.
+- `src/ui/` holds Streamlit controls, session state, views, and UI configuration;
+  `streamlit_app.py` is only the launch file.
 - `config/` defines approved sources, search presets, and scoring weights.
   `evals/` contains synthetic frozen fixtures and evaluation cases; `tests/`
   contains focused Python tests. Design notes live in `docs/`.
@@ -36,9 +38,10 @@ python evals/validate.py
 git diff --check
 ```
 
-The first runs current unit tests, the second validates evaluation fixtures,
-and the third catches whitespace errors. No package manifest, build command,
-or application entry point exists yet; add one before documenting a run command.
+The first runs unit tests, the second validates evaluation fixtures, and the
+third catches whitespace errors. `requirements.txt` lists runtime dependencies;
+`python -m src.cli --help` shows the frozen-fixture entry point. Actual CLI runs
+make model API calls, so use offline fakes in tests.
 
 ## Code style and tests
 

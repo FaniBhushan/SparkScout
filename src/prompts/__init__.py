@@ -11,7 +11,14 @@ from typing import Literal
 
 from pydantic import TypeAdapter
 
-from src.models import CandidateAssessment, CandidateIdea, ScoutQuery, SourceQuery
+from src.models import (
+    CandidateAssessment,
+    CandidateIdea,
+    PromptSuggestions,
+    ProposalDraft,
+    ScoutQuery,
+    SourceQuery,
+)
 
 
 PromptName = Literal[
@@ -19,6 +26,8 @@ PromptName = Literal[
     "scout_candidate_generator",
     "library_query_planner",
     "critic_candidate_judge",
+    "final_proposal",
+    "request_interpreter",
 ]
 PROMPT_DIR = Path(__file__).resolve().parent
 _PROMPTS: dict[PromptName, tuple[str, TypeAdapter]] = {
@@ -26,6 +35,8 @@ _PROMPTS: dict[PromptName, tuple[str, TypeAdapter]] = {
     "scout_candidate_generator": ("scout_candidate_generator.md", TypeAdapter(list[CandidateIdea])),
     "library_query_planner": ("library_query_planner.md", TypeAdapter(list[SourceQuery])),
     "critic_candidate_judge": ("critic_candidate_judge.md", TypeAdapter(CandidateAssessment)),
+    "final_proposal": ("final_proposal.md", TypeAdapter(ProposalDraft)),
+    "request_interpreter": ("request_interpreter.md", TypeAdapter(PromptSuggestions)),
 }
 _PLACEHOLDER = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
 

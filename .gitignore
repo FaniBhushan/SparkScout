@@ -21,6 +21,10 @@ htmlcov/
 !.env.example
 .streamlit/secrets.toml
 
+# Local user-provided material must never be committed
+/uploads/
+/local_uploads/
+
 # Editor and operating-system files
 .DS_Store
 .idea/

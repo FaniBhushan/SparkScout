@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "content_types": ["metadata", "abstract", "page_snippet", "dataset_description", "readme", "release_notes", "issue_excerpt"],
+  "content_types": ["metadata", "abstract", "page_snippet", "dataset_description", "readme", "release_notes", "issue_excerpt", "licensed_full_text"],
   "presets": {
     "balanced": {
       "max_queries": 8,
