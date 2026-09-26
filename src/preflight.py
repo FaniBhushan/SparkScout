@@ -13,6 +13,7 @@ from src.configuration import (
     resolve_search_configuration,
 )
 from src.evaluation import load_evaluation_configuration
+from src.guardrails import input_advisories
 from src.models import (
     InputRequest,
     BudgetPolicy,
@@ -202,6 +203,7 @@ def prepare_run(
 ) -> PreparedRun:
     """Validate choices and freeze the exact request, search, and rubric for execution."""
 
+    advisories = input_advisories(submitted)
     if submitted.search.custom_instructions or submitted.evaluation.custom_instructions:
         raise ValueError("free-text configuration instructions require interpretation before a run")
     registry = sources if sources is not None else load_source_configuration()
@@ -277,6 +279,9 @@ def prepare_run(
         evaluation=evaluation,
         budgets=budgets,
         field_origins=_field_origins(submitted),
+        warnings=list(dict.fromkeys([
+            *advisories, *getattr(upload_adapter, "warnings", []),
+        ])),
         configuration_checksum=effective_configuration_checksum(
             request, search, evaluation, budgets
         ),

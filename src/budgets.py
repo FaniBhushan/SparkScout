@@ -8,6 +8,7 @@ from dataclasses import replace
 from time import monotonic
 
 from src.adapters.base import SourceAdapter
+from src.guardrails import check_privacy, emit_advisories
 from src.llm.client import LLMClient, ModelPricing, ModelReply, ModelResponseError
 from src.models import RunBudgetLimits
 from src.models.scout_query import SourceQuery
@@ -177,6 +178,7 @@ class BudgetedSourceAdapter:
         self.budget = budget
 
     async def search(self, query: SourceQuery) -> list[SourceRecord]:
+        emit_advisories(check_privacy(query))
         await self.budget.reserve_provider_call(self.provider_id)
         records = await self.adapter.search(query)
         await self.budget.account_source_bytes(sum(

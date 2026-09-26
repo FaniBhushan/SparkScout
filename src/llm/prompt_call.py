@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import nullcontext
 
+from src.guardrails import check_privacy, emit_advisories
 from src.llm.client import LLMClient, ModelReply, ModelResponseError
 from src.models import UsageRecord
 from src.observability import RunTracer
@@ -22,6 +24,7 @@ async def call_prompt(
     """Trace one model call, including usage when output validation fails."""
 
     with tracer.span(name, task_id=task_id) if tracer else nullcontext():
+        emit_advisories(check_privacy(context))
         prompt = render_prompt(name, **context)
         try:
             reply = await llm_client.complete(prompt, max_output_tokens=max_output_tokens)
@@ -31,6 +34,13 @@ async def call_prompt(
             raise
         if tracer:
             _record_usage(tracer, name, reply, task_id=task_id)
+        # Scan before schema errors or downstream components can expose raw text.
+        check_privacy(reply.text)
+        try:
+            decoded = json.loads(reply.text)
+        except ValueError:
+            decoded = reply.text  # The contract parser still reports invalid JSON.
+        emit_advisories(check_privacy(decoded))
         return parse_model_output(name, reply.text)
 
 

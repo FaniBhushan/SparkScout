@@ -8,6 +8,8 @@ from typing import Protocol
 
 from openai import AsyncOpenAI
 
+from src.prompts import TRUST_BOUNDARY_INSTRUCTIONS
+
 
 @dataclass(frozen=True)
 class ModelReply:
@@ -85,11 +87,18 @@ class OpenAITextClient:
         if max_output_tokens <= 0:
             raise ValueError("max_output_tokens must be positive")
 
+        instruction_options = {}
+        if prompt.startswith(TRUST_BOUNDARY_INSTRUCTIONS):
+            # Promote only the code-owned prefix, never any user/source text.
+            # The budget already counted these bytes in the rendered prompt.
+            instruction_options["instructions"] = TRUST_BOUNDARY_INSTRUCTIONS
+            prompt = prompt[len(TRUST_BOUNDARY_INSTRUCTIONS):]
         response = await self.sdk_client.responses.create(
             model=self.model,
             input=prompt,
             max_output_tokens=max_output_tokens,
             store=False,
+            **instruction_options,
         )
         usage = getattr(response, "usage", None)
         estimated_cost = None

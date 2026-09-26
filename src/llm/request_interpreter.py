@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from src.adapters.base import SourceAdapter
 from src.configuration import load_search_defaults, load_source_configuration
 from src.evaluation.rubric import DEFAULT_RUBRIC_PATH
+from src.guardrails import check_privacy, emit_advisories, input_advisories
 from src.llm.client import LLMClient
 from src.llm.prompt_call import call_prompt
 from src.models import (
@@ -36,10 +37,12 @@ class LLMRequestInterpreter:
         defaults: SearchDefaults | None = None,
         tracer: RunTracer | None = None,
     ) -> PromptInterpretationDraft:
-        """Limit input/output size and mark capabilities the model cannot grant."""
+        """Warn on large input, bound output, and flag unavailable capabilities."""
 
-        if not prompt.strip() or len(prompt) > 4000:
-            raise ValueError("request text must contain 1 to 4000 characters")
+        if not prompt.strip():
+            raise ValueError("request text must not be empty")
+        advisories = input_advisories(prompt)
+        emit_advisories(advisories)
         sources = sources if sources is not None else load_source_configuration()
         defaults = defaults if defaults is not None else load_search_defaults()
         rubric = json.loads(DEFAULT_RUBRIC_PATH.read_text(encoding="utf-8"))
@@ -122,7 +125,8 @@ class LLMRequestInterpreter:
                     message="The model marked an absent or unknown suggestion as uncertain",
                 ))
         return PromptInterpretationDraft(
-            original_prompt=prompt, suggestions=suggestions, issues=issues
+            original_prompt=prompt, suggestions=suggestions, issues=issues,
+            warnings=list(dict.fromkeys([*advisories, *check_privacy(suggestions)])),
         )
 
 

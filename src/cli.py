@@ -6,12 +6,14 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 
 from src.adapters import build_available_adapters
 from src.adapters.user_upload import MAX_FILE_BYTES
 from src.application import run_prepared_research
 from src.demo import OfflineDemoClient
+from src.guardrails import emit_advisories, safe_error_message
 from src.interpretation import confirm_interpretation
 from src.llm.client import ModelPricing, OpenAITextClient
 from src.llm.request_interpreter import LLMRequestInterpreter
@@ -150,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         })
 
     prepared = prepare_run(submitted, adapters)
+    emit_advisories(prepared.warnings)
     if args.offline_demo:
         client = OfflineDemoClient()
     else:
@@ -165,4 +168,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as error:
+        print(safe_error_message(error), file=sys.stderr)
+        raise SystemExit(2) from None

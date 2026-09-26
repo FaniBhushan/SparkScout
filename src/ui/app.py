@@ -15,6 +15,7 @@ from src.adapters import build_available_adapters
 from src.adapters.frozen_fixture import DEFAULT_FIXTURE_ROOT
 from src.application import run_prepared_research
 from src.demo import OfflineDemoClient
+from src.guardrails import SensitiveContentError, input_advisories, safe_error_message
 from src.llm.client import ModelPricing, OpenAITextClient
 from src.llm.request_interpreter import LLMRequestInterpreter
 from src.models import PreparedRun
@@ -96,12 +97,14 @@ def main() -> None:
             upload_rights_confirmed=upload_rights_confirmed,
         )
     except ValueError as error:
-        upload_error = str(error)
+        upload_error = safe_error_message(error)
         adapters = build_available_adapters(
             fixture_set=fixture_set, include_live=data_mode == "Live sources"
         )
     upload_adapter = adapters.get("user_upload")
     if upload_adapter is not None:
+        for warning in upload_adapter.warnings:
+            st.warning(warning)
         st.session_state.ui_values["search.uploads"] = [
             item.model_dump(mode="python") for item in upload_adapter.manifest
         ]
@@ -136,8 +139,16 @@ def main() -> None:
         st.info("Advanced values are retained while Simple mode is shown. Reopen Advanced to edit them.")
 
     prompt = _prompt_text()
+    input_error = None
+    try:
+        for warning in input_advisories({"prompt": prompt, "fields": st.session_state.ui_values}):
+            st.warning(warning)
+    except SensitiveContentError as error:
+        input_error = safe_error_message(error)
+        st.error(input_error)
     if st.button("Draft fields from prompt", disabled=(
-        data_mode == "Offline demo" or not prompt or not model_id or not os.getenv("OPENAI_API_KEY")
+        bool(input_error) or data_mode == "Offline demo" or not prompt
+        or not model_id or not os.getenv("OPENAI_API_KEY")
     )):
         try:
             client = OpenAITextClient(model_id)
@@ -150,7 +161,9 @@ def main() -> None:
             st.session_state.draft_providers = tuple(catalog.providers)
             st.session_state.preview = None
         except (ValueError, ValidationError, RuntimeError) as error:
-            st.error(str(error))
+            st.session_state.draft = None
+            st.session_state.preview = None
+            st.error(safe_error_message(error))
     draft = st.session_state.draft
     if draft is not None and st.session_state.get("draft_providers") != tuple(catalog.providers):
         st.warning("Available sources changed. Draft the prompt again before previewing.")
@@ -161,8 +174,8 @@ def main() -> None:
     fingerprint = _fingerprint(prompt, data_mode, fixture_set)
     if st.button("Preview configuration"):
         try:
-            if upload_error:
-                raise ValueError(upload_error)
+            if upload_error or input_error:
+                raise ValueError(upload_error or input_error)
             submitted = submitted_from_controls(
                 st.session_state.ui_values,
                 st.session_state.ui_explicit,
@@ -175,12 +188,14 @@ def main() -> None:
             st.session_state.preview = (fingerprint, prepared)
         except (ValueError, ValidationError) as error:
             st.session_state.preview = None
-            st.error(str(error))
+            st.error(safe_error_message(error))
 
     preview = st.session_state.preview
     ready = preview is not None and preview[0] == fingerprint
     if ready:
         prepared: PreparedRun = preview[1]
+        for warning in prepared.warnings:
+            st.warning(warning)
         st.subheader("Resolved preview")
         st.write(
             f"{prepared.search.domain} · {prepared.submitted.search.preset} search · "
@@ -216,6 +231,7 @@ def main() -> None:
     if st.button("Start research", type="primary", disabled=(
         not ready
         or bool(upload_error)
+        or bool(input_error)
         or (data_mode == "Live sources" and (not model_id or not os.getenv("OPENAI_API_KEY")))
         or (ready and preview[1].budgets.max_estimated_cost_usd is not None and (
             st.session_state.get("saved_pricing_input", 0.0) <= 0
@@ -257,7 +273,8 @@ def main() -> None:
                 status.update(label="Run complete", state="complete")
             except Exception as error:
                 status.update(label="Run failed", state="error")
-                st.error(f"{type(error).__name__}: {error}")
+                st.session_state.result = None
+                st.error(safe_error_message(error))
             finally:
                 tracer.close()
     if st.session_state.result is not None:

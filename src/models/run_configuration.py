@@ -153,6 +153,7 @@ class PreparedRun(ContractModel):
     budgets: RunBudgetLimits
     field_origins: dict[str, ValueOrigin]
     configuration_checksum: str = Field(pattern=r"^[0-9a-f]{64}$")
+    warnings: list[NonEmptyText] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_checksum(self) -> "PreparedRun":

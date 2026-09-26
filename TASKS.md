@@ -70,7 +70,15 @@ relevant PR or evaluation report.
       though they are active.
 
 ## Reliability and evaluation
-- [ ] Enforce input and output guard rails.
+- [x] Add MVP input/output guardrails: warn (do not truncate or reject) on long
+      prompts, bound structured fields/lists, block recognizable credentials,
+      warn about contact details, and scan model inputs/outputs and exports.
+- [x] Separate instructions from input JSON and add deterministic injection,
+      privacy, CLI, and UI regression tests. These do not prove model resistance.
+- [x] Add nine synthetic claim-support cases and a component evaluator using the
+      existing Critic, with offline scoring and explicit opt-in model calls.
+- [ ] Review the claim-support labels and run real-model/adversarial evaluations;
+      use measured false-support failures to decide on a runtime verifier.
 - [ ] Enforce provider request, run time, token, and cost limits; handle timeouts,
       rate limits, branch failures, malformed model output, and empty retrieval.
 - [ ] Add versioned run manifests, atomic checkpoints/resume, and safe caching.
@@ -91,5 +99,11 @@ relevant PR or evaluation report.
       FAISS only if corpus size or search latency warrants a dedicated index.
 
 ## Submission readiness
+- [ ] Improve the UI:
+      - curently everything is one column. Make simple and advanced configurations collapsable.
+      - All the configurations are vertically placed in one column even though the text does not require the full width of the screen. Make multiple columns .
+      - overall, make better use of the screen.
+      - Output shall be displayed on next page and there shall be back button to review the input.
+      - option to start new search.
 - [ ] Make the code readable and good quality with best practices.
 - [ ] Add good comment documentation throughout.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from src.guardrails import SensitiveContentError, check_privacy, safe_error_message
 from src.models import PromptInterpretationDraft
 
 
@@ -12,6 +13,8 @@ def _show_draft(draft: PromptInterpretationDraft, prompt: str) -> None:
         st.warning("The prompt changed. Draft it again before previewing.")
         return
     st.subheader("Review proposed fields")
+    for warning in draft.warnings:
+        st.warning(warning)
     suggestions = draft.suggestions
     for section in ("request", "search", "evaluation"):
         for field, value in getattr(suggestions, section).model_dump(
@@ -33,6 +36,12 @@ def _show_draft(draft: PromptInterpretationDraft, prompt: str) -> None:
 
 
 def _result_view(result) -> None:
+    try:
+        for warning in check_privacy(result):
+            st.warning(warning)
+    except SensitiveContentError as error:
+        st.error(safe_error_message(error))
+        return
     st.subheader("Run result")
     st.write(f"Status: {result.status} · Mode: {result.mode} · Run ID: {result.run_id}")
     st.json(result.budget_usage.model_dump(mode="json") if result.budget_usage else {})
@@ -53,8 +62,8 @@ def _result_view(result) -> None:
         ], hide_index=True)
     for proposal in result.final_proposals:
         with st.expander(f"#{proposal.rank} {proposal.title} — {proposal.total_score:.1f}", expanded=True):
-            st.write(proposal.problem_statement)
-            st.write("MVP:", proposal.scoped_mvp)
+            st.text(proposal.problem_statement)
+            st.text("MVP:\n" + "\n".join(proposal.scoped_mvp))
             st.write("Evaluation:", proposal.evaluation_plan.model_dump(mode="json"))
             st.dataframe([
                 {
@@ -67,7 +76,7 @@ def _result_view(result) -> None:
             ], hide_index=True)
             source_by_id = {source.source_id: source for source in result.source_manifest}
             for claim in proposal.citations:
-                st.write(claim.claim)
+                st.text(claim.claim)
                 for reference in claim.references:
                     source = source_by_id[reference.source_id]
                     st.caption(
@@ -78,5 +87,3 @@ def _result_view(result) -> None:
         st.json(result.prepared_run.model_dump(mode="json") if result.prepared_run else {})
     st.download_button("Download run JSON", result.model_dump_json(indent=2),
                        file_name=f"scoutspark-{result.run_id}.json", mime="application/json")
-
-

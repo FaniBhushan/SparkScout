@@ -110,6 +110,12 @@ For optional local documents, repeat `--upload PATH` and add
 
 ## Configuration and sources
 
+Long prompts now produce a cost/delay warning instead of a length-based
+rejection. Structured fields remain concise; obvious credentials are blocked
+and possible contact details produce a warning. These lightweight checks add
+no model calls and do not guarantee privacy or factual correctness. See
+[guardrails and their limits](docs/guardrails.md).
+
 Edit [`config/sources.json`](config/sources.json) for approved providers and source
 types, [`config/search_defaults.json`](config/search_defaults.json) for search
 limits, [`config/retrieval.json`](config/retrieval.json) for index limits, and

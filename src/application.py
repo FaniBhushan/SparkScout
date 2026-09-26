@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from src.adapters.base import SourceAdapter
 from src.budgets import BudgetExceeded, BudgetedLLMClient, BudgetedSourceAdapter, RunBudget
 from src.finalization import ProposalCoverageError, finalize_proposals
+from src.guardrails import check_privacy, emit_advisories, input_advisories
 from src.llm import (
     LLMCandidateGenerator,
     LLMCandidateJudge,
@@ -123,6 +124,9 @@ async def run_prepared_research(
 
     # Revalidate a potentially mutable nested model before any external work.
     prepared = PreparedRun.model_validate(prepared.model_dump(mode="python"))
+    advisories = input_advisories(prepared.submitted)
+    check_privacy(prepared)
+    emit_advisories(advisories)
     selected = {provider.provider_id for provider in prepared.search.providers}
     missing = selected - set(available_adapters)
     if missing:
@@ -201,4 +205,9 @@ async def run_prepared_research(
     _redact_uploaded_text(data, prepared)
     data["prepared_run"] = prepared.model_dump(mode="python")
     data["budget_usage"] = budget.snapshot()
+    # Export redaction does not cover generated summaries; inspect those too.
+    output_warnings = check_privacy(data)
+    data["warnings"] = list(dict.fromkeys([
+        *data["warnings"], *advisories, *prepared.warnings, *output_warnings,
+    ]))
     return OrchestrationResult.model_validate(data)

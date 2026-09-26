@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import Field, PositiveInt
 
 from .common import ContractModel, Identifier, NonEmptyText
-from .input_request import SkillLevel
+from .input_request import DetailList, DomainText, InterestList, SkillLevel
 from .search_defaults import SearchLimits
 from .source_configuration import EvidenceTier, SourcePolicy
 
@@ -16,14 +16,14 @@ from .source_configuration import EvidenceTier, SourcePolicy
 class RequestSuggestions(ContractModel):
     """Only values actually stated or strongly implied by the user belong here."""
 
-    domain: NonEmptyText | None = None
+    domain: DomainText | None = None
     time_limit_days: PositiveInt | None = None
-    interests: list[NonEmptyText] | None = None
+    interests: InterestList | None = None
     skill_level: SkillLevel | None = None
     team_size: PositiveInt | None = None
-    available_resources: list[NonEmptyText] | None = None
-    excluded_topics: list[NonEmptyText] | None = None
-    data_constraints: list[NonEmptyText] | None = None
+    available_resources: DetailList | None = None
+    excluded_topics: DetailList | None = None
+    data_constraints: DetailList | None = None
     desired_candidate_count: PositiveInt | None = None
     finalist_count: PositiveInt | None = None
 
@@ -70,6 +70,7 @@ class PromptInterpretationDraft(ContractModel):
     original_prompt: NonEmptyText
     suggestions: PromptSuggestions
     issues: list[InterpretationIssue] = Field(default_factory=list)
+    warnings: list[NonEmptyText] = Field(default_factory=list)
 
 
 class InterpretationReview(ContractModel):

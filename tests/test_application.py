@@ -24,7 +24,10 @@ def prompt_json(prompt: str, label: str):
     """Read one rendered JSON input without depending on schema formatting."""
 
     start = prompt.index(label) + len(label)
-    value, _ = json.JSONDecoder().raw_decode(prompt[start:].lstrip())
+    block = prompt[start:].lstrip()
+    if block.startswith('<data name="'):
+        block = block.split("\n", 1)[1]
+    value, _ = json.JSONDecoder().raw_decode(block)
     return value
 
 

@@ -2,6 +2,7 @@
 
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
@@ -10,6 +11,52 @@ APP = Path(__file__).resolve().parents[1] / "streamlit_app.py"
 
 
 class StreamlitUITests(unittest.TestCase):
+    def test_sensitive_generated_output_is_not_rendered_or_downloadable(self):
+        def show_sensitive_result():
+            from src.ui.views import _result_view
+            from tests.test_guardrails import SECRET
+            _result_view({"technical_approach": SECRET})
+
+        app = AppTest.from_function(show_sensitive_result).run(timeout=30)
+        self.assertEqual(len(app.exception), 0)
+        self.assertTrue(any("credential" in item.value for item in app.error))
+        self.assertEqual(len(app.get("download_button")), 0)
+
+    def test_long_prompt_warns_but_drafting_is_allowed_and_interests_stay_short(self):
+        from tests.test_prompt_interpretation import FakeLLM
+        from src.guardrails import LONG_INPUT_WARNING
+
+        client = FakeLLM({"request": {"domain": "AI engineering", "time_limit_days": 30}})
+        with (patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
+              patch("src.ui.app.OpenAITextClient", return_value=client)):
+            app = AppTest.from_file(str(APP)).run(timeout=30)
+            app.radio[0].set_value("Live sources").run(timeout=30)
+            app.text_input(key="model_id").set_value("offline-test").run(timeout=30)
+            app.text_area(key="request_prompt").set_value("x" * 4001).run(timeout=30)
+            self.assertIn(LONG_INPUT_WARNING, [item.value for item in app.warning])
+            self.assertFalse(app.button[0].disabled)
+            app.button[0].click().run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            self.assertEqual(len(client.calls), 1)
+            self.assertIn("x" * 4001, client.calls[0][0])
+            interests = next(item for item in app.text_input if item.label.startswith("Interests"))
+            interests.set_value("x" * 201).run(timeout=30)
+            app.button[1].click().run(timeout=30)
+            self.assertTrue(app.button[2].disabled)
+            self.assertTrue(any("200" in item.value for item in app.error))
+
+    def test_secret_input_blocks_drafting_without_echoing_secret(self):
+        from tests.test_guardrails import SECRET
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}):
+            app = AppTest.from_file(str(APP)).run(timeout=30)
+            app.radio[0].set_value("Live sources").run(timeout=30)
+            app.text_input(key="model_id").set_value("offline-test").run(timeout=30)
+            app.text_area(key="request_prompt").set_value(SECRET).run(timeout=30)
+            self.assertTrue(app.button[0].disabled)
+            self.assertTrue(any("credential" in item.value for item in app.error))
+            self.assertFalse(any(SECRET in item.value for item in app.error))
+
     def test_offline_preview_and_deliberate_run(self):
         app = AppTest.from_file(str(APP)).run(timeout=30)
         self.assertEqual(len(app.exception), 0)

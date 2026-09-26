@@ -14,6 +14,9 @@ The candidate's identity, rank, and numeric scores are fixed by code.
 - Explain the gap or differentiation cautiously when the supplied evidence is weak.
 - Cite material claims with the exact supplied source and chunk IDs. Do not cite
   an unseen source or chunk. Include at least one supporting chunk citation.
+- A valid citation ID is not proof of support. Omit unsupported factual claims,
+  or explicitly label them as assumptions to test; never present contradictory
+  evidence or a proposed future metric as an established result.
 - Return only JSON matching the output schema, without markdown.
 
 # Input

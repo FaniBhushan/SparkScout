@@ -9,7 +9,10 @@ from src.llm.client import ModelReply
 
 def _prompt_json(prompt: str, label: str) -> object:
     start = prompt.index(label) + len(label)
-    value, _ = json.JSONDecoder().raw_decode(prompt[start:].lstrip())
+    block = prompt[start:].lstrip()
+    if block.startswith('<data name="'):
+        block = block.split("\n", 1)[1]
+    value, _ = json.JSONDecoder().raw_decode(block)
     return value
 
 

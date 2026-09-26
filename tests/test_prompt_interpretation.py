@@ -7,6 +7,7 @@ import unittest
 from pydantic import ValidationError
 
 from src.interpretation import confirm_interpretation
+from src.guardrails import GuardrailWarning
 from src.llm.client import ModelReply
 from src.llm.request_interpreter import LLMRequestInterpreter
 from src.models import InterpretationReview
@@ -48,9 +49,12 @@ class InterpretationTests(unittest.TestCase):
         self.assertEqual(len(client.calls), 1)
         self.assertEqual(client.calls[0][1], 1800)
         self.assertEqual(draft.original_prompt, "AI engineering in 30 days")
-        with self.assertRaisesRegex(ValueError, "4000"):
-            asyncio.run(interpreter.draft("x" * 4001, self.adapters))
-        self.assertEqual(len(client.calls), 1)
+        with self.assertWarnsRegex(GuardrailWarning, "cost and delay"):
+            large_draft = asyncio.run(interpreter.draft("x" * 4001, self.adapters))
+        self.assertEqual(len(client.calls), 2)
+        self.assertEqual(large_draft.original_prompt, "x" * 4001)
+        self.assertIn("x" * 4001, client.calls[-1][0])
+        self.assertTrue(large_draft.warnings)
 
     def test_missing_required_fields_are_not_guessed(self):
         draft, _ = self.draft({"request": {"interests": ["education"]}})

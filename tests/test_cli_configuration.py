@@ -37,6 +37,26 @@ class DraftOnlyClient:
 
 
 class CLIConfigurationTests(unittest.TestCase):
+    def test_large_prompt_warns_on_stderr_and_preserves_json_stdout(self):
+        client = DraftOnlyClient()
+        output, errors = StringIO(), StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "prompt.txt"
+            path.write_text("AI engineering " * 400, encoding="utf-8")
+            with (
+                patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
+                patch("src.cli.OpenAITextClient", return_value=client),
+                redirect_stdout(output), redirect_stderr(errors),
+            ):
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("always")
+                    main(["--prompt-file", str(path), "--fixture-set", "ai_engineering_capstone_01",
+                          "--model", "offline-fake"])
+        self.assertEqual(client.calls, 1)
+        self.assertEqual(json.loads(output.getvalue())["original_prompt"], ("AI engineering " * 400).strip())
+        self.assertIn("cost and delay", errors.getvalue())
+
     def test_full_config_uses_shared_preflight_and_returns_provenance(self):
         submitted = SubmittedRunConfiguration(
             request=InputRequest(

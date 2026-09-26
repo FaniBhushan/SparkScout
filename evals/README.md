@@ -55,3 +55,40 @@ python3 evals/validate.py
 The cases cover normal requests, AI Engineering, public-data restrictions,
 medical safety, privacy, limited hardware, short deadlines, excluded topics,
 missing required input, and insufficient source coverage.
+
+## Claim-support component evaluation
+
+`guardrails/claim_support.json` adds nine synthetic, reviewable claim/evidence
+pairs. Three labels distinguish **supported**, **unsupported** (not established),
+and **contradictory** (explicitly refuted). Two cases contain injected instructions.
+These are starter development cases, not an independent held-out benchmark.
+
+```sh
+python -m evals.claim_support --validate-only
+python -m evals.claim_support --predictions predictions.json
+```
+
+Saved predictions are a JSON list of `{"id": "support_count", "label": "supported"}`
+records, one per case. Missing, duplicate, or unknown IDs are rejected. The report
+includes accuracy, a confusion matrix, and the false-support rate: the fraction
+of unsupported/contradictory cases incorrectly called supported. Invalid model
+outputs count as wrong rather than being dropped.
+
+To measure the existing Critic against the cases, explicitly choose a model:
+
+```sh
+python -m evals.claim_support --model YOUR_MODEL_ID
+```
+
+This requires `OPENAI_API_KEY` and makes nine model calls (up to 1,000 output
+tokens each, with normal client retries), which may incur charges. It performs
+no source searches and adds no calls to normal research runs. Gold labels are
+not sent to the model. The test uses a focused claim-support rubric and reads
+the Critic's evidence stance; it does not measure the entire proposal pipeline.
+Review the labels and record actual model results before deciding whether an
+extra runtime verifier is necessary. No live-model quality result is claimed
+by the offline tests.
+
+This focused classification approach follows the
+[official evaluation guidance](https://developers.openai.com/api/docs/guides/evaluation-best-practices),
+including task-specific cases and human review of labels.

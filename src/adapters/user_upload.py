@@ -8,6 +8,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Sequence
 
+from src.guardrails import check_privacy
 from src.models.run_configuration import UploadedSource
 from src.models.scout_query import SourceQuery
 from src.models.source_record import RetrievalStatus, SourceRecord
@@ -35,10 +36,12 @@ class UserUploadAdapter:
         if not files or len(files) > MAX_FILES:
             raise ValueError(f"upload between 1 and {MAX_FILES} files")
         self.manifest: list[UploadedSource] = []
+        self.warnings: list[str] = []
         self._records: list[SourceRecord] = []
         seen_names: set[str] = set()
         seen_hashes: set[str] = set()
         for filename, raw, language in files:
+            check_privacy(filename)
             if filename in seen_names:
                 raise ValueError("uploaded filenames must be unique")
             seen_names.add(filename)
@@ -56,6 +59,7 @@ class UserUploadAdapter:
                     raise ValueError(f"{filename}: text must be UTF-8") from error
                 pages = 0
             text = text.strip()
+            self.warnings = list(dict.fromkeys([*self.warnings, *check_privacy(text)]))
             if not text or len(text) > MAX_TEXT_CHARS:
                 raise ValueError(f"{filename}: extractable text must be 1–{MAX_TEXT_CHARS} characters")
             digest = hashlib.sha256(raw).hexdigest()
