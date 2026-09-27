@@ -8,6 +8,9 @@ from src.adapters.base import SourceAdapter
 from src.models import InputRequest, ResolvedSearchConfiguration, SourceQuery
 from src.models.source_record import RetrievalStatus, SourceRecord
 from src.observability import RunTracer
+from src.adapters.http_json import SourceAdapterError
+from src.runtime.budgets import ProviderCallBudgetExceeded
+from src.workers.provider_failures import may_skip_provider_failure
 from src.workers.source_filter import same_source_content, source_is_within_age_limit
 from src.sources.merge import capture_excerpts, is_live_source, merge_source_records
 
@@ -61,7 +64,23 @@ async def recover_source_coverage(
         )
         with (tracer.span("coverage_search", provider_id=provider.provider_id, query_id=query.query_id)
               if tracer else nullcontext()):
-            results = await adapters[provider.provider_id].search(query)
+            try:
+                results = await adapters[provider.provider_id].search(query)
+            except (ProviderCallBudgetExceeded, SourceAdapterError) as error:
+                if not may_skip_provider_failure(provider.provider_id, kinds, search):
+                    raise
+                warnings.append(
+                    f"{stage.capitalize()} could not recover coverage from {provider.provider_id} "
+                    f"({type(error).__name__}); other sources were retained."
+                )
+                if tracer:
+                    tracer.event(
+                        stage, "optional_provider_skipped",
+                        provider_id=provider.provider_id,
+                        failure_type=type(error).__name__,
+                    )
+                used += 1
+                continue
         used += 1
         warnings.append(f"{stage.capitalize()} used a remaining query to recover source coverage.")
         for source in results[:query.max_results]:

@@ -57,6 +57,12 @@ is needed to complete the listed human-review task.
 - [ ] Make recovery-first behavior consistent across interpretation, planning,
       adapters, workers, orchestration, and UI. Cover optional failures,
       adapter over-returns, UI resume, and cross-stage fault recovery.
+- [ ] Evaluate a GitHub GraphQL adapter against the current REST repository
+      search. On identical queries, measure unique usable repositories,
+      request/point consumption, latency, response size, and rate-limit errors.
+      GraphQL has a separate point budget and may reduce calls through precise
+      field selection, but it does not bypass GitHub's primary or secondary
+      limits. Retain REST fallback and rate-limit-aware backoff.
 - [ ] Compare semantic embeddings with the lexical/TF-IDF baseline only if held-out
       retrieval evaluation shows missed relevant evidence. Measure quality,
       latency, and embedding cost before adopting a vector index.

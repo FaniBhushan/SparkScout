@@ -12,6 +12,7 @@ from src.llm.client import ModelReply
 from src.llm.request_interpreter import LLMRequestInterpreter
 from src.models import InterpretationReview
 from src.application.preflight import prepare_run
+from src.prompts import parse_model_output
 
 
 class FakeLLM:
@@ -55,6 +56,10 @@ class InterpretationTests(unittest.TestCase):
         self.assertEqual(large_draft.original_prompt, "x" * 4001)
         self.assertIn("x" * 4001, client.calls[-1][0])
         self.assertTrue(large_draft.warnings)
+
+    def test_json_interpretation_can_unwrap_a_complete_markdown_fence(self):
+        result = parse_model_output("request_interpreter", '```json\n{}\n```')
+        self.assertEqual(result.request.model_dump(exclude_unset=True), {})
 
     def test_missing_required_fields_are_not_guessed(self):
         draft, _ = self.draft({"request": {"interests": ["education"]}})

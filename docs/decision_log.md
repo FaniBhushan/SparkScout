@@ -155,6 +155,26 @@ reuse without additional model calls. The live test completed with one proposal
 using the existing narrative-caveat policy; broader results are recorded in the
 recovery evaluation report. Human quality review remains necessary.
 
+## GitHub GraphQL retrieval evaluation — planned, 27 September 2026
+
+**Issue:** Repeated REST repository searches can exhaust GitHub's dedicated
+search allowance. A suggested alternative is GitHub GraphQL, which uses a
+separate point-based budget and can return selected related fields in fewer
+round trips.
+
+**Decision:** Evaluate GraphQL as an optimization, not as a rate-limit bypass.
+GitHub applies primary, secondary, node, and timeout limits to GraphQL. Compare
+it with the existing REST adapter using fixed queries and measure unique usable
+sources, GraphQL points or REST requests, latency, response size, and failures.
+Keep the REST adapter as a fallback and implement header-aware pacing/backoff.
+Treat GitHub's allowance separately from ScoutSpark's own per-run provider-call
+budget so the UI and traces report the actual limiting layer.
+
+**Reference:** The idea came from a
+[2026 DEV article](https://dev.to/agenthustler/github-api-rate-limits-in-2026-when-web-scraping-is-the-better-choice-hdo),
+and the constraints should be validated against GitHub's official GraphQL and
+REST rate-limit documentation before implementation.
+
 ## Remaining evaluation/design risks
 
 ### 27 September follow-up: four reliability issues

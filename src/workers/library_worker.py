@@ -11,6 +11,9 @@ from src.adapters.base import SourceAdapter
 from src.models import InputRequest, LibraryResult, ResolvedSearchConfiguration, SourceQuery
 from src.models.source_record import SourceRecord
 from src.observability import RunTracer
+from src.adapters.http_json import SourceAdapterError
+from src.runtime.budgets import ProviderCallBudgetExceeded
+from src.workers.provider_failures import may_skip_provider_failure
 from src.workers.source_filter import same_source_content, source_is_within_age_limit
 from src.sources.merge import capture_excerpts, is_live_source, merge_source_records
 from src.workers.query_limits import bound_query_plan
@@ -77,16 +80,31 @@ class LibraryWorker:
                 "max_results": min(query.max_results, remaining),
                 "source_types": source_types,
             })
-            with (
-                self.tracer.span(
-                    "library_source_search",
-                    provider_id=query.provider_id,
-                    query_id=query.query_id,
+            try:
+                with (
+                    self.tracer.span(
+                        "library_source_search",
+                        provider_id=query.provider_id,
+                        query_id=query.query_id,
+                    )
+                    if self.tracer
+                    else nullcontext()
+                ):
+                    results = await self.adapters[query.provider_id].search(bounded)
+            except (ProviderCallBudgetExceeded, SourceAdapterError) as error:
+                if not may_skip_provider_failure(query.provider_id, source_types, search):
+                    raise
+                warnings.append(
+                    f"Library skipped {query.provider_id} search ({type(error).__name__}); "
+                    "continuing with other available sources."
                 )
-                if self.tracer
-                else nullcontext()
-            ):
-                results = await self.adapters[query.provider_id].search(bounded)
+                if self.tracer:
+                    self.tracer.event(
+                        "library", "optional_provider_skipped",
+                        provider_id=query.provider_id,
+                        failure_type=type(error).__name__,
+                    )
+                continue
             if len(results) > bounded.max_results:
                 raise ValueError(f"adapter {query.provider_id!r} exceeded the query result limit")
             for source in results:

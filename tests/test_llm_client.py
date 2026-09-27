@@ -43,6 +43,7 @@ class OpenAITextClientTests(unittest.IsolatedAsyncioTestCase):
         self.sdk_client.responses.create.assert_awaited_once_with(
             model="example-model",
             input="Plan queries",
+            text={"format": {"type": "json_object"}},
             max_output_tokens=100,
             store=False,
         )

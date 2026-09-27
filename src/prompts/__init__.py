@@ -93,6 +93,7 @@ def parse_model_output(name: PromptName, output: str | bytes | object) -> object
     except KeyError:
         raise ValueError(f"unknown prompt template: {name!r}") from None
     if isinstance(output, (str, bytes)):
+        output = _strip_json_markdown_fence(output)
         try:
             return output_type.validate_json(output, strict=True)
         except ValidationError:
@@ -101,6 +102,23 @@ def parse_model_output(name: PromptName, output: str | bytes | object) -> object
                 raise
             return output_type.validate_json(repaired, strict=True)
     return output_type.validate_python(output, strict=True)
+
+
+def _strip_json_markdown_fence(output: str | bytes) -> str | bytes:
+    """Unwrap only a complete JSON code fence; leave prose and malformed text alone."""
+
+    if isinstance(output, bytes):
+        try:
+            text = output.decode("utf-8")
+        except UnicodeDecodeError:
+            return output
+    else:
+        text = output
+    lines = text.strip().splitlines()
+    if (len(lines) >= 3 and lines[0].strip().casefold() in {"```", "```json"}
+            and lines[-1].strip() == "```"):
+        return "\n".join(lines[1:-1]).strip()
+    return output
 
 
 def repair_known_candidate_field(output: str | bytes) -> str | None:

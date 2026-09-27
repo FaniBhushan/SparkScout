@@ -34,6 +34,8 @@ class ScoreSelectionTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertIn("Access audit", app.expander[0].label)
         self.assertTrue(app.warning)
+        self.assertTrue(any("Proposal sketch" in item.value for item in app.markdown))
+        self.assertTrue(any("Target users:" in item.value for item in app.text))
         self.assertEqual(sum("Not a finalist:" in item.value for item in app.caption), 1)
         result.prepared_run = None
         result.requested_finalist_count = 1

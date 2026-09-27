@@ -25,6 +25,26 @@ evaluation remains open. Failure handling and opt-in CLI checkpoints/resume are
 implemented; see [checkpoint behavior](docs/checkpoints.md), the
 [issue and design decision log](docs/decision_log.md), and [TASKS.md](TASKS.md).
 
+## How ScoutSpark works
+
+ScoutSpark uses role-specialized LLM workers coordinated by the orchestrator:
+
+1. **Scout** plans discovery queries and proposes candidate ideas.
+2. **Library** independently researches sources and prepares evidence chunks.
+3. The orchestrator joins results and builds a **run-scoped in-memory TF-IDF /
+   keyword index**. Critic retrieves relevant passages for each candidate, gets
+   rubric assessments from the LLM, then applies configured weights and hard
+   gates in code.
+4. The proposal writer drafts from cited evidence; the verifier checks claim
+   support. Finalization ranks candidates and can try the next one or run one
+   bounded recovery round if no draft survives.
+
+This is a retrieval-augmented workflow, not a semantic-vector database or an
+open-ended agent loop. Tavily and GitHub adapters return source records and
+snippets; optional user documents can add evidence. Frozen fixtures are
+synthetic and intended for offline tests. See the [design document](docs/design_doc_submission.md)
+for the component diagram and evaluation limits.
+
 Detailed proposals require passed gates and a separate evidence audit, with at most one correction. The
 temporary demo policy may retain explicitly marked narrative hypotheses after
 that correction; it does not waive factual citations, essential data/access, or
@@ -90,15 +110,29 @@ path measures live research quality.
 python -m streamlit run streamlit_app.py
 ```
 
-Choose **Offline demo** to preview and run against synthetic frozen records
-without an API key or network research. For live GitHub/Tavily research, choose
-**Live sources**, set `OPENAI_API_KEY`, and enter a model ID. Tavily also needs
-`TAVILY_API_KEY`. Prompt interpretation is a separate model call: review its
-suggestions and issues, preview the resolved configuration, then click **Start
-research**. Editing controls invalidates the preview. The UI can download the
-reviewed configuration as JSON for `--config` in the CLI. Reusing a config with
-uploads also requires the same files via `--upload` and
-`--confirm-upload-rights`; the JSON contains receipts, not file bytes.
+### Using the app
+
+1. Start the app with the command above.
+2. Choose **Offline demo** to explore the UI using synthetic records, without
+   credentials or live network searches. Choose **Live sources** for Tavily and
+   GitHub research; provide `OPENAI_API_KEY`, a model ID, and (for Tavily) a
+   `TAVILY_API_KEY`.
+3. Describe the project you want to explore, or enter the structured request.
+   If using prompt interpretation, review its suggestions and issues: this is a
+   separate model call and its output is editable.
+4. Choose Simple or Advanced settings, adjust source types, limits, or rubric
+   weights as needed, then select **Preview configuration**. Preview shows the
+   resolved search settings, selected adapters, budgets, and request issues
+   before research starts.
+5. Start research. Review the ranked scorecards, gate caveats, evidence, and
+   any verified detailed proposals. A top-two score finalist is not necessarily
+   a gate-passing proposal; read its caveats. Download the run result or
+   reviewed configuration if needed.
+
+Editing settings invalidates the preview, so preview again before starting.
+The UI can download the reviewed configuration as JSON for `--config` in the
+CLI. Reusing a config with uploads also requires the same files via `--upload`
+and `--confirm-upload-rights`; the JSON contains receipts, not file bytes.
 `streamlit_app.py` is the launch file; UI code lives in `src/ui/`.
 
 Documents are optional. In Live mode, a user may add up to five `.txt`, `.md`,

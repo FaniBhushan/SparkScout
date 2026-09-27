@@ -49,10 +49,8 @@ def main() -> None:
                          key="data_mode")
     if st.session_state.get("last_data_mode") != data_mode:
         if data_mode == "Live sources":
-            st.session_state.ui_explicit.difference_update({
-                "request.domain", "request.time_limit_days",
-                "request.desired_candidate_count", "request.finalist_count",
-            })
+            # These fields remain visible after switching modes. Do not remove
+            # them from the reviewed values while leaving their widgets selected.
             st.session_state.ui_values["request.desired_candidate_count"] = 5
             st.session_state.ui_values["request.finalist_count"] = 2
         else:
@@ -180,7 +178,13 @@ def main() -> None:
         except (ValueError, ValidationError, RuntimeError) as error:
             st.session_state.draft = None
             st.session_state.preview = None
-            st.error(safe_error_message(error))
+            if isinstance(error, ValidationError):
+                st.error(
+                    "The model reply did not match the request fields. No search has started. "
+                    "Try drafting again, or fill the fields directly."
+                )
+            else:
+                st.error(safe_error_message(error))
     draft = st.session_state.draft
     if draft is not None and st.session_state.get("draft_providers") != tuple(catalog.providers):
         st.warning("Available sources changed. Draft the prompt again before previewing.")

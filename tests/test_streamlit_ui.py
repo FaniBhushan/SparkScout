@@ -57,6 +57,31 @@ class StreamlitUITests(unittest.TestCase):
             self.assertTrue(any("credential" in item.value for item in app.error))
             self.assertFalse(any(SECRET in item.value for item in app.error))
 
+    def test_domain_selection_survives_switch_to_live_mode(self):
+        app = AppTest.from_file(str(APP)).run(timeout=30)
+        self.assertEqual(app.session_state["ui_values"]["request.domain"], "AI engineering")
+        app.radio[0].set_value("Live sources").run(timeout=30)
+        self.assertIn("request.domain", app.session_state["ui_explicit"])
+        self.assertEqual(app.session_state["ui_values"]["request.domain"], "AI engineering")
+
+    def test_bad_draft_reply_shows_retry_guidance_not_json_parser_detail(self):
+        from src.llm.client import ModelReply
+
+        class InvalidReply:
+            async def complete(self, prompt, *, max_output_tokens):
+                return ModelReply("This is not JSON.", "offline-test")
+
+        with (patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
+              patch("src.ui.app.OpenAITextClient", return_value=InvalidReply())):
+            app = AppTest.from_file(str(APP)).run(timeout=30)
+            app.radio[0].set_value("Live sources").run(timeout=30)
+            app.text_input(key="model_id").set_value("offline-test").run(timeout=30)
+            app.text_area(key="request_prompt").set_value("AI engineering project").run(timeout=30)
+            app.button[0].click().run(timeout=30)
+            errors = [item.value for item in app.error]
+            self.assertTrue(any("No search has started" in value for value in errors))
+            self.assertFalse(any("expected value at line" in value for value in errors))
+
     def test_offline_preview_and_deliberate_run(self):
         app = AppTest.from_file(str(APP)).run(timeout=30)
         self.assertEqual(len(app.exception), 0)

@@ -35,8 +35,23 @@ def render_scorecards(result) -> None:
                 if not finalist:
                     st.caption(f"Not a finalist: score rank {rank} is outside the requested top {target}. Ties use candidate ID.")
                 if candidate:
+                    st.markdown("**Proposal sketch**")
+                    st.caption(
+                        "A concept summary from Scout. It is not a verified detailed proposal; "
+                        "review the gates and evidence caveats below."
+                    )
                     st.text(candidate.problem_statement)
+                    st.text("Target users: " + ", ".join(candidate.target_users))
                     st.text("Proposed outcome: " + candidate.proposed_outcome)
+                    st.text("Why it matters: " + candidate.why_it_matters)
+                    if candidate.evaluation_method:
+                        st.text("Initial test: " + candidate.evaluation_method)
+                    if candidate.required_data:
+                        st.text("Required data: " + ", ".join(candidate.required_data))
+                    if candidate.required_tools:
+                        st.text("Required tools: " + ", ".join(candidate.required_tools))
+                    if candidate.access_assumptions:
+                        st.text("Access assumptions: " + ", ".join(candidate.access_assumptions))
                 for gate in evaluation.hard_gates:
                     if not gate.passed:
                         st.warning(f"{gate.gate_id.replace('_', ' ')}: {gate.rationale}")
@@ -71,7 +86,11 @@ def render_scorecards(result) -> None:
                             st.caption(f"{source.title} · {source.canonical_url or source.source_id}")
     unscored = [item for item in result.scout.candidates if item.candidate_id not in evaluations]
     if unscored:
-        with st.expander("Ideas without a score"):
+        with st.expander("Ideas without a score", expanded=not bool(ordered)):
             st.caption("These ideas could not be ranked. See the run warnings for coverage, budget, or assessment failures.")
             for candidate in unscored:
-                st.text(candidate.title)
+                st.markdown(f"**{candidate.title}**")
+                st.text(candidate.problem_statement)
+                st.text("Proposed outcome: " + candidate.proposed_outcome)
+                st.text("Target users: " + ", ".join(candidate.target_users))
+                st.caption("This idea could not be scored, so it is not ranked as a finalist.")

@@ -102,6 +102,7 @@ class CriticWorker:
                         )
                         self._trace_candidate_skip(candidate, "invalid_critic_schema")
                         continue
+                    repaired_source_ids = self._repair_chunk_source_ids(assessment, evidence)
                     repaired_citations = self._fill_unambiguous_chunk_ids(assessment, evidence)
                     try:
                         evaluations.append(
@@ -115,14 +116,15 @@ class CriticWorker:
                         )
                         self._trace_candidate_skip(candidate, f"invalid_critic_{category}")
                         continue
-                    if repaired_citations:
-                        warnings.append(
-                            f"Candidate {candidate.candidate_id} had a source-only citation; "
-                            "its unique retrieved chunk ID was filled in."
-                        )
+                    if repaired_source_ids or repaired_citations:
+                        if repaired_citations and not repaired_source_ids:
+                            message = "its source-only citation was matched to its unique retrieved chunk ID."
+                        else:
+                            message = "an unambiguous citation reference was normalized to its retrieved chunk."
+                        warnings.append(f"Candidate {candidate.candidate_id} had {message}")
                         if self.tracer:
                             self.tracer.event(
-                                "critic", "citation_chunk_id_repaired", task_id=candidate.candidate_id
+                                "critic", "retrieved_citation_repaired", task_id=candidate.candidate_id
                             )
             return CriticResult(evaluations=evaluations, warnings=warnings)
 
@@ -162,6 +164,23 @@ class CriticWorker:
                 matching = chunks_by_source.get(reference.source_id, [])
                 if len(matching) == 1:
                     reference.chunk_id = matching[0]
+                    repaired = True
+        return repaired
+
+    @staticmethod
+    def _repair_chunk_source_ids(
+        assessment: CandidateAssessment, evidence: list[RetrievedChunk]
+    ) -> bool:
+        """Correct a wrong source ID only when the cited retrieved chunk is exact."""
+
+        actual_sources = {hit.chunk.chunk_id: hit.chunk.source_id for hit in evidence}
+        repaired = False
+        judgments = [*assessment.criteria.values(), *assessment.hard_gates.values()]
+        for judgment in judgments:
+            for reference in judgment.evidence:
+                actual_source = actual_sources.get(reference.chunk_id or "")
+                if actual_source is not None and actual_source != reference.source_id:
+                    reference.source_id = actual_source
                     repaired = True
         return repaired
 

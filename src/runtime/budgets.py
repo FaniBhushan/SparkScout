@@ -26,6 +26,10 @@ class ModelAllowanceExceeded(BudgetExceeded):
     """A pre-call reservation did not fit; no generation request was sent."""
 
 
+class ProviderCallBudgetExceeded(BudgetExceeded):
+    """One provider's allowance is spent; other configured sources may continue."""
+
+
 class StageAllowanceExceeded(ModelAllowanceExceeded):
     """Research must stop so remaining tokens can be used for finalization."""
 
@@ -175,9 +179,9 @@ class RunBudget:
             self.check_time()
             limit = self.limits.provider_call_limits.get(provider_id)
             if limit is None:
-                raise BudgetExceeded(f"provider {provider_id!r} has no run call allowance")
+                raise ProviderCallBudgetExceeded(f"provider {provider_id!r} has no run call allowance")
             if self._provider_calls[provider_id] >= limit:
-                raise BudgetExceeded(f"provider {provider_id!r} call budget exhausted")
+                raise ProviderCallBudgetExceeded(f"provider {provider_id!r} call budget exhausted")
             self._provider_calls[provider_id] += 1
             self.persist()
             if self.tracer:

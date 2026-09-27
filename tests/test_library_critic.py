@@ -17,6 +17,7 @@ from src.models import (
 )
 from src.models.common import EvidenceReference
 from src.models.source_record import RetrievalStatus
+from src.adapters.http_json import SourceRateLimitError
 from src.retrieval import InMemoryRetriever
 from src.workers.critic_worker import CriticWorker
 from src.workers.library_worker import LibraryWorker
@@ -150,6 +151,48 @@ class LibraryCriticTests(unittest.TestCase):
         self.assertEqual(result.evaluations, [])
         self.assertEqual(len(result.warnings), 1)
         self.assertIn("citation check failed", result.warnings[0])
+
+    def test_critic_normalizes_source_id_from_an_exact_retrieved_chunk(self):
+        class MismatchedSourceJudge(Judge):
+            async def assess(self, request, candidate, evidence, rubric):
+                assessment = await super().assess(request, candidate, evidence, rubric)
+                ref = assessment.criteria["feasibility"].evidence[0]
+                ref.source_id = "incorrect-source"
+                return assessment
+
+        library = asyncio.run(
+            LibraryWorker({"fixture": Adapter()}, Planner()).run(self.request, self.search)
+        )
+        result = asyncio.run(
+            CriticWorker(InMemoryRetriever(library.chunks), MismatchedSourceJudge()).run(
+                self.request, [self.candidate], library, load_evaluation_configuration()
+            )
+        )
+        self.assertEqual(len(result.evaluations), 1)
+        self.assertTrue(any("citation reference was normalized" in item
+                            for item in result.warnings))
+
+    def test_library_keeps_optional_provider_rate_limit_local(self):
+        class LimitedAdapter:
+            async def search(self, query):
+                raise SourceRateLimitError("github", "limited", status=429)
+
+        class GitHubPlanner:
+            async def plan(self, request, search):
+                return [SourceQuery(
+                    query_id="github-query", provider_id="github",
+                    text="accessible capstone datasets", source_types=["dataset"],
+                    content_types=["text"], max_results=2,
+                )]
+
+        github_provider = self.search.providers[0].model_copy(update={"provider_id": "github"})
+        search = self.search.model_copy(update={"providers": [github_provider]})
+        result = asyncio.run(
+            LibraryWorker({"github": LimitedAdapter()}, GitHubPlanner()).run(self.request, search)
+        )
+        self.assertFalse(result.sources)
+        self.assertTrue(any("continuing with other available sources" in item
+                            for item in result.warnings))
 
     def test_failed_hard_gate_disqualifies_a_high_scoring_candidate(self):
         class FailingJudge(Judge):

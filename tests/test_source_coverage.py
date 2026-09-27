@@ -3,6 +3,7 @@
 import unittest
 
 from src.adapters import FrozenFixtureAdapter
+from src.adapters.http_json import SourceRateLimitError
 from src.models import InputRequest, ResolvedSearchConfiguration, SourceQuery
 from src.workers.source_coverage import recover_source_coverage
 
@@ -41,3 +42,20 @@ class CoverageTests(unittest.IsolatedAsyncioTestCase):
             {"frozen_fixture": ForbiddenAdapter()}, planned_queries=4, stage="library")
         self.assertEqual(sources, initial)
         self.assertFalse(warnings)
+
+    async def test_rate_limited_optional_source_does_not_discard_existing_sources(self):
+        class LimitedAdapter:
+            async def search(self, query):
+                raise SourceRateLimitError("github", "limited", status=429)
+
+        initial = await self.initial_sources()
+        providers = [self.search.providers[0].model_copy(update={
+            "provider_id": provider_id, "source_types": ["community_signal"],
+        }) for provider_id in ("github", "backup")]
+        search = self.search.model_copy(update={"providers": providers})
+        sources, warnings = await recover_source_coverage(
+            self.request, search, initial, {"github": LimitedAdapter()},
+            planned_queries=2, stage="library",
+        )
+        self.assertEqual(sources, initial)
+        self.assertTrue(any("could not recover coverage" in warning for warning in warnings))

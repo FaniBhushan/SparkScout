@@ -119,7 +119,14 @@ class OpenAITextClient:
                 split = marker
             instruction_options["instructions"] = prompt[:split]
             prompt = prompt[split:]
-        return {"model": self.model, "input": prompt, **instruction_options}
+        return {
+            "model": self.model,
+            "input": prompt,
+            # All ScoutSpark prompts expect a JSON contract. Ask the provider to
+            # enforce JSON syntax instead of paying for avoidable prose retries.
+            "text": {"format": {"type": "json_object"}},
+            **instruction_options,
+        }
 
     async def count_input_tokens(self, prompt: str) -> int:
         """Count the actual request framing when a conservative reservation will not fit."""

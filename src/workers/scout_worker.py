@@ -18,6 +18,9 @@ from src.models import (
 )
 from src.models.source_record import RetrievalStatus
 from src.observability import RunTracer
+from src.adapters.http_json import SourceAdapterError
+from src.runtime.budgets import ProviderCallBudgetExceeded
+from src.workers.provider_failures import may_skip_provider_failure
 from src.workers.source_filter import same_source_content, source_is_within_age_limit
 from src.sources.merge import capture_excerpts, is_live_source, merge_source_records
 from src.workers.query_limits import bound_query_plan
@@ -117,7 +120,25 @@ class ScoutWorker:
                 else nullcontext()
             )
             with trace_span:
-                results = await self.adapters[query.provider_id].search(bounded_query)
+                try:
+                    results = await self.adapters[query.provider_id].search(bounded_query)
+                except (ProviderCallBudgetExceeded, SourceAdapterError) as error:
+                    if not may_skip_provider_failure(query.provider_id, source_types, search):
+                        raise
+                    warnings.append(
+                        f"Scout skipped {query.provider_id} search ({type(error).__name__}); "
+                        "continuing with other available sources."
+                    )
+                    if self.tracer:
+                        self.tracer.event(
+                            "scout", "optional_provider_skipped",
+                            provider_id=query.provider_id,
+                            failure_type=type(error).__name__,
+                        )
+                    search_calls += 1
+                    if self.tracer:
+                        self.tracer.budget("scout", "search_calls", search_calls, search.max_queries)
+                    continue
             search_calls += 1
             if self.tracer:
                 self.tracer.event(
