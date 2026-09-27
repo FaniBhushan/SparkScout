@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from src.models.scout_query import SourceQuery
 from src.models.source_record import RetrievalStatus, SourceRecord
 
-from .http_json import SourceAdapterError, request_json
+from .http_json import SourceAdapterError, SourcePayloadError, request_json
 
 
 class TavilyAdapter:
@@ -60,7 +60,7 @@ class TavilyAdapter:
         )
         results = payload.get("results", [])
         if not isinstance(results, list):
-            raise SourceAdapterError(self.provider_id, "search results were not a list")
+            raise SourcePayloadError(self.provider_id, "search results were not a list")
 
         captured_at = datetime.now(timezone.utc)
         sources = []

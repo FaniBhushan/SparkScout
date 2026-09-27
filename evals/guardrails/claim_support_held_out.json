@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "synthetic": true,
+  "cases": [
+    {"id": "heldout_missing_accuracy", "claim": "The system achieved 99% accuracy on the benchmark.", "evidence": "The team selected 99% as its target and plans to run the benchmark after implementation.", "expected": "unsupported"},
+    {"id": "heldout_missing_population", "claim": "Every public hospital needs this scheduling tool.", "evidence": "Five staff members at one hospital said they would consider trying a prototype.", "expected": "unsupported"},
+    {"id": "heldout_missing_causality", "claim": "Using the reminder app caused attendance to improve.", "evidence": "In a voluntary survey, 14 participants said reminders were useful. No attendance measurements or comparison group were collected.", "expected": "unsupported"},
+    {"id": "heldout_contradiction_hardware", "claim": "The pipeline runs entirely on a CPU.", "evidence": "The tested pipeline requires a CUDA-capable GPU; CPU execution is unsupported.", "expected": "contradictory"},
+    {"id": "heldout_contradiction_license", "claim": "The dataset permits commercial reuse.", "evidence": "The dataset license explicitly prohibits commercial use without separate written permission.", "expected": "contradictory"},
+    {"id": "heldout_contradiction_count", "claim": "The usability study enrolled 50 participants.", "evidence": "The final study report records 17 enrolled participants, not 50.", "expected": "contradictory"}
+  ]
+}

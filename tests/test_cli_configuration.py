@@ -8,7 +8,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from src.cli import main
+from src.ui.cli import main
 from src.demo import OfflineDemoClient
 from src.llm.client import ModelReply
 from src.models import (
@@ -45,7 +45,7 @@ class CLIConfigurationTests(unittest.TestCase):
             path.write_text("AI engineering " * 400, encoding="utf-8")
             with (
                 patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
-                patch("src.cli.OpenAITextClient", return_value=client),
+                patch("src.ui.cli.OpenAITextClient", return_value=client),
                 redirect_stdout(output), redirect_stderr(errors),
             ):
                 import warnings
@@ -73,7 +73,7 @@ class CLIConfigurationTests(unittest.TestCase):
             path.write_text(submitted.model_dump_json(), encoding="utf-8")
             with (
                 patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
-                patch("src.cli.OpenAITextClient", return_value=FakeLLMClient()),
+                patch("src.ui.cli.OpenAITextClient", return_value=FakeLLMClient()),
                 redirect_stdout(output),
             ):
                 exit_code = main([
@@ -96,7 +96,7 @@ class CLIConfigurationTests(unittest.TestCase):
             path.write_text("AI engineering in 30 days", encoding="utf-8")
             with (
                 patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
-                patch("src.cli.OpenAITextClient", return_value=client),
+                patch("src.ui.cli.OpenAITextClient", return_value=client),
                 redirect_stdout(output),
             ):
                 exit_code = main([
@@ -146,7 +146,7 @@ class CLIConfigurationTests(unittest.TestCase):
                 main(["--request", str(request_path), "--model", "offline-test", *paths])
             with (
                 patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
-                patch("src.cli.OpenAITextClient", return_value=OfflineDemoClient()),
+                patch("src.ui.cli.OpenAITextClient", return_value=OfflineDemoClient()),
                 redirect_stdout(output),
             ):
                 main(["--request", str(request_path), "--model", "offline-test",
@@ -178,7 +178,7 @@ class CLIConfigurationTests(unittest.TestCase):
             review_path.write_text(review.model_dump_json(), encoding="utf-8")
             with (
                 patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
-                patch("src.cli.OpenAITextClient", return_value=client),
+                patch("src.ui.cli.OpenAITextClient", return_value=client),
                 redirect_stdout(output),
             ):
                 main([

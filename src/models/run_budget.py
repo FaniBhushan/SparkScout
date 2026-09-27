@@ -36,6 +36,8 @@ class RunBudgetUsage(ContractModel):
     estimated_cost_usd: NonNegativeFloat | None = None
     provider_calls: dict[Identifier, NonNegativeInt] = Field(default_factory=dict)
     elapsed_seconds: NonNegativeFloat = 0
+    reserved_model_tokens: NonNegativeInt = 0
+    reserved_cost_usd: NonNegativeFloat = 0
 
 
 class BudgetPolicy(ContractModel):

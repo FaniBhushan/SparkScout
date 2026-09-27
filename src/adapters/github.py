@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 from src.models.scout_query import SourceQuery
 from src.models.source_record import RetrievalStatus, SourceRecord
 
-from .http_json import SourceAdapterError, request_json
+from .http_json import SourcePayloadError, request_json
 
 
 class GitHubAdapter:
@@ -53,7 +53,7 @@ class GitHubAdapter:
         )
         results = payload.get("items", [])
         if not isinstance(results, list):
-            raise SourceAdapterError(self.provider_id, "repository results were not a list")
+            raise SourcePayloadError(self.provider_id, "repository results were not a list")
 
         captured_at = datetime.now(timezone.utc)
         sources = []

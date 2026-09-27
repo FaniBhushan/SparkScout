@@ -31,5 +31,16 @@
     "token_count": 13,
     "start_offset": 0,
     "end_offset": 84
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "rbt-community-001-c1",
+    "source_id": "rbt-community-001",
+    "ordinal": 0,
+    "text": "Anecdotal grower posts describe difficulty spotting early leaf disease during routine crop scouting; no quantified yield losses are reported.",
+    "content_hash": "sha256:rbt-community-001-c1",
+    "token_count": 19,
+    "start_offset": 0,
+    "end_offset": 133
   }
 ]

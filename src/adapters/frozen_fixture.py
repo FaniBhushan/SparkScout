@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from src.models.scout_query import SourceQuery
-from src.models.source_record import SourceRecord
+from src.models.source_record import SourceChunk, SourceRecord
 
 
 DEFAULT_FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "evals" / "frozen_sources"
@@ -45,6 +45,25 @@ class FrozenFixtureAdapter:
         if not isinstance(raw_sources, list):
             raise ValueError("fixture sources.json must contain a JSON list")
         self._sources = [SourceRecord.model_validate(item) for item in raw_sources]
+        by_id = {source.source_id: source for source in self._sources}
+        if len(by_id) != len(self._sources):
+            raise ValueError("fixture source IDs must be unique")
+        chunks_path = self.fixture_dir / "chunks.json"
+        if chunks_path.is_file():
+            raw_chunks = json.loads(chunks_path.read_text(encoding="utf-8"))
+            if not isinstance(raw_chunks, list):
+                raise ValueError("fixture chunks.json must contain a JSON list")
+            seen = set()
+            for item in raw_chunks:
+                chunk = SourceChunk.model_validate(item)
+                if chunk.source_id not in by_id:
+                    raise ValueError("fixture chunk references an unknown source")
+                if chunk.chunk_id in seen:
+                    raise ValueError("fixture chunk IDs must be unique")
+                if chunk.text_redacted:
+                    raise ValueError("fixture evidence must contain readable text")
+                seen.add(chunk.chunk_id)
+                by_id[chunk.source_id].evidence_chunks.append(chunk)
 
     async def search(self, query: SourceQuery) -> list[SourceRecord]:
         """Select requested fixture types and bind records to this search query."""
@@ -60,7 +79,16 @@ class FrozenFixtureAdapter:
             for source in self._sources
             if source.source_type in query.source_types
         ][: query.max_results]
-        return [
-            source.model_copy(update={"provider": self.provider_id, "query_id": query.query_id})
-            for source in selected
-        ]
+        records = []
+        for source in selected:
+            # Prepared synthetic passages are snippets, not permission to fetch full text.
+            include_text = bool({"abstract", "snippet"} & set(query.content_types))
+            records.append(source.model_copy(deep=True, update={
+                "provider": self.provider_id,
+                "query_id": query.query_id,
+                "abstract_or_snippet": source.abstract_or_snippet if include_text else None,
+                "evidence_chunks": [chunk.model_copy(deep=True) for chunk in source.evidence_chunks]
+                if include_text else [],
+                "full_text": None,
+            }))
+        return records

@@ -2,7 +2,9 @@
 
 from typing import cast
 
-from src.llm.client import LLMClient
+from pydantic import ValidationError
+
+from src.llm.client import LLMClient, ModelResponseError
 from src.llm.prompt_call import call_prompt
 from src.llm.query_planner import _LLMQueryPlanner
 
@@ -66,13 +68,72 @@ class LLMCandidateGenerator:
             )
             for source in sources
         ]
-        return cast(
-            list[CandidateIdea],
-            await call_prompt(
-                self.llm_client,
-                "scout_candidate_generator",
-                {"REQUEST_JSON": request, "SOURCE_RECORDS_JSON": compact_sources},
-                max_output_tokens=self.max_output_tokens,
-                tracer=self.tracer,
-            ),
+        candidates = await generate_candidate_batches(
+            self.llm_client, request, compact_sources,
+            max_output_tokens=self.max_output_tokens, tracer=self.tracer,
         )
+        # Synthetic ideas can influence subsequent batches, but never leave generation.
+        return [item for item in candidates if item.origin != "synthetic"]
+
+
+async def generate_candidate_batches(
+    client: LLMClient, request: InputRequest, sources: list[dict], *,
+    max_output_tokens: int, tracer: RunTracer | None,
+) -> list[CandidateIdea]:
+    """Bound generation output and retain valid ideas when a later batch is malformed.
+
+    Use at most three ideas per response, with a finite batch count and one extra
+    attempt for a truncated initial response. Compact idea summaries prevent
+    repeated ideas without resending full prior outputs. Shared run budgets
+    remain authoritative; budget and transport failures still propagate.
+    """
+
+    from src.llm.candidate_batches import merge_candidates
+
+    batch_size = min(3, max(1, max_output_tokens // 700))
+    batch_limit = (request.desired_candidate_count + batch_size - 1) // batch_size
+    candidates: list[CandidateIdea] = []
+    initial_recovery_used = False
+    for batch_index in range(batch_limit + 1):
+        if len(candidates) >= request.desired_candidate_count:
+            break
+        if batch_index >= batch_limit and not initial_recovery_used:
+            break
+        requested_count = min(batch_size, request.desired_candidate_count - len(candidates))
+        context = {
+            "REQUEST_JSON": request, "SOURCE_RECORDS_JSON": sources,
+            "BATCH_JSON": {
+                "requested_count": requested_count,
+                "existing_ideas": [
+                    {"target_users": item.target_users, "problem_statement": item.problem_statement,
+                     "proposed_outcome": item.proposed_outcome, "origin": item.origin}
+                    for item in candidates
+                ],
+            },
+        }
+        try:
+            batch = cast(list[CandidateIdea], await call_prompt(
+                client, "scout_candidate_generator", context,
+                max_output_tokens=max_output_tokens, tracer=tracer,
+                task_id=f"batch-{batch_index + 1}", validation_retry_limit=0,
+            ))
+        except (ValidationError, ModelResponseError) as error:
+            if isinstance(error, ModelResponseError) and error.reply is None:
+                raise
+            if tracer:
+                tracer.event("candidate_generation", "batch_response_failed", count=len(candidates))
+            if candidates:
+                break
+            if initial_recovery_used:
+                raise
+            # Retry only the failed initial batch with a smaller output request.
+            initial_recovery_used = True
+            batch_size = max(1, batch_size // 2)
+            continue
+        merged = merge_candidates(candidates, batch[:requested_count], sources)
+        if len(merged) == len(candidates):
+            break  # More paid attempts on unchanged evidence are unlikely to help.
+        candidates = merged
+        if tracer:
+            tracer.event("candidate_generation", "batch_retained", count=len(candidates))
+    return candidates

@@ -25,6 +25,9 @@ htmlcov/
 /uploads/
 /local_uploads/
 
+# Local traces, checkpoints, and cached research
+/runs/
+
 # Editor and operating-system files
 .DS_Store
 .idea/

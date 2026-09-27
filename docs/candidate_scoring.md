@@ -14,9 +14,45 @@ Simple configuration selects a preset with
 `load_evaluation_configuration("feasibility-first")`. Advanced configuration passes
 all criterion weights as `weights={...}`; partial maps and totals other than 100
 are rejected. The scoring formula is `score / 5 * weight`, summed to a 0–100 total.
-`delivery_risk` uses a high score for *low* risk. A failed hard gate disqualifies a
-candidate even if its numeric score is high; final ranking belongs to the
-orchestrator.
+`delivery_risk` uses a high score for *low* risk. A failed hard gate blocks automatic
+recommendation even if its numeric score is high; final ranking belongs to the
+orchestrator. The UI still presents failed candidates and their caveats.
+
+## Evidence and timing gates
+
+`evidence_sufficiency` checks support for essential MVP dependencies: suitable
+data, usable methods/tools, and required resources. Expected benefits, such as
+better crop yields, may be explicitly unproven hypotheses. Missing proof of a
+future benefit alone does not fail this gate. Essential data that is missing or
+not permitted must also fail `data_access`.
+
+`time_scope` fails for a supported, unavoidable conflict with the user's deadline,
+such as a required six-month experiment in a 30-day project. An uncertain effort
+estimate is a caveat and may lower feasibility/delivery-risk scores; it is not
+proof of a deadline conflict. These semantic judgments are made by Critic, not
+deterministic duration arithmetic. A passing time gate never guarantees delivery.
+Critic uncertainty is carried into proposal `unknowns` and shown in the UI.
+
+## User review
+
+When only `evidence_sufficiency` fails and all other configured gates pass, the UI
+shows the idea under **Candidates needing review**. The user acknowledges the
+caveats and chooses **Keep this idea despite the evidence gap**, or declines it.
+Other failures, including a known deadline conflict or unavailable data, cannot
+be overridden through this control.
+
+`src/evaluation/review.py` records the decision without model calls. The original
+gate result, ranking, automatic finalists, and run status remain intact. Acceptance
+selects an idea for the user's consideration; it does not generate a final proposal
+or count as a successful automatic recommendation. `review_decisions` retains
+decision history, caveats, timestamps, and a fingerprint of the exact candidate
+and assessment. The last decision for a candidate is the current choice.
+
+Decisions live in the current UI session and its downloadable run JSON; they are
+not written back to research checkpoints. A new run needs a new acknowledgement.
+The model contract rejects decisions attached to a different run, changed
+assessment, or ineligible candidate. The CLI exports the same assessment data;
+interactive acceptance is currently provided by the UI.
 
 Library searches independently from Scout. Live GitHub/Tavily results provide
 metadata and short snippets; confirmed user uploads can provide extracted text.

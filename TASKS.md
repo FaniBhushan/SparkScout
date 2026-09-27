@@ -64,12 +64,38 @@ relevant PR or evaluation report.
       deliberate start action; never start network research during form edits.
 - [x] Show run progress, selected sources, enforced budgets, scores, warnings,
       citations, and the configuration behind each result in the UI.
+- [x] Clarify evidence sufficiency around essential MVP dependencies and time
+      scope around supported deadline conflicts. Show uncertainty in results;
+      let users keep or decline evidence-only failures after acknowledging caveats.
+      Preserve the original assessment and record decisions in session/downloaded
+      JSON without model calls or automatic finalist promotion. Known time/data
+      conflicts remain blocking. Offline backend and UI tests pass; updated model
+      judgment quality still needs evaluation.
 - [x] Expose the same supported configuration through the existing CLI and add
       offline tests for defaults, deductions, conflicts, weights, mode switching,
       and pre-run validation. Do not display controls for unenforced limits as
       though they are active.
 
 ## Reliability and evaluation
+- [x] Treat requested proposal counts as targets: return valid partial results
+      without filling the user output with synthetic ideas. Allow explicitly
+      labeled synthetic ideas only for internal exploration and filter them
+      before Scout results, Critic selection, display, and downloads.
+- [x] Bound candidate generation to small responses; preserve earlier valid
+      batches after malformed/truncated output. Stop on no progress; shared
+      budgets remain authoritative. Record target attainment separately from
+      structural evaluation success.
+- [x] Connect frozen `chunks.json` passages to Library and Critic; preserve source
+      links and citation IDs alongside distinct summaries. Include passages in
+      byte accounting and frozen-input fingerprints. Offline tests verify the
+      actual Critic prompt in both modes. A live robotics rerun cited prepared
+      evidence; proposal generation still failed the separate feasibility gate.
+- [x] Add a modular development-case end-to-end runner with frozen sources,
+      structural checks, failure/usage reports, and per-proposal human review
+      sheets. Offline default suite exercises three domains and reports expected
+      demo limitations; paid end-to-end quality evaluation remains pending.
+- [x] Clarify missing versus contradictory evidence in the Critic prompt following
+      the first component baseline. The updated prompt still needs live evaluation.
 - [x] Add MVP input/output guardrails: warn (do not truncate or reject) on long
       prompts, bound structured fields/lists, block recognizable credentials,
       warn about contact details, and scan model inputs/outputs and exports.
@@ -79,13 +105,39 @@ relevant PR or evaluation report.
       existing Critic, with offline scoring and explicit opt-in model calls.
 - [ ] Review the claim-support labels and run real-model/adversarial evaluations;
       use measured false-support failures to decide on a runtime verifier.
-- [ ] Enforce provider request, run time, token, and cost limits; handle timeouts,
+      Assistant label review is recorded in `evals/guardrails/label_review.md`;
+      First real-model baseline: 6/9 correct, zero false-support predictions;
+      all three unsupported cases were mislabeled contradictory. Broader
+      adversarial/held-out testing and the verifier decision remain open.
+      Approved: gpt-4o-mini, $1 maximum. Root .env loading and explicit per-run
+      evaluation cost/rate arguments are implemented. Baseline cost: $0.00450315.
+- [x] Enforce provider request, run time, token, and cost limits; handle timeouts,
       rate limits, branch failures, malformed model output, and empty retrieval.
-- [ ] Add versioned run manifests, atomic checkpoints/resume, and safe caching.
-- [ ] Verify source/citation integrity, hard gates, deterministic ranking, and
+      Required parallel failures now cancel/drain siblings; budget exceptions
+      propagate consistently. Unknown model usage retains reserved allowance.
+      SDK retries are disabled; optional one-retry policy reserves each attempt.
+      Typed provider/model failures and Retry-After handling are tested offline.
+- [x] Add versioned run manifests, atomic checkpoints/resume, and safe caching.
+      CLI/application opt-in, atomic state plus budget, 24-hour stage-cache reuse,
+      frozen replay, exclusive writer, and input/code fingerprints are implemented.
+      Upload-derived stage outputs remain memory-only; re-upload/recompute uses
+      the remaining budget. See docs/checkpoints.md for retention and limitations.
+- [x] Verify source/citation integrity, hard gates, deterministic ranking, and
       equivalent results in sequential and parallel modes on frozen inputs.
+      Deterministic end-to-end comparison includes tied scores and a high-scoring
+      candidate rejected by a hard gate; live model equivalence is not claimed.
 - [ ] Complete runs in three domain families; compare quality, latency, and cost
       with the same frozen cases and limits.
+      The original live baseline exposed fixture coverage and model-output
+      errors. After gate-policy and bounded-generation changes, all three cases
+      finished without execution errors; accessibility returned one proposal,
+      robotics and medicine returned none. See evals/three_domain_review.md.
+      The latest accounted spend is approximately $0.2115 of $1, including
+      reserved unknown usage. A prior robotics proposal had unsupported claims
+      despite valid citation IDs. Semantic support and human review remain open.
+      Partial-result and internal-only synthetic handling are tested offline;
+      they were added after the latest paid run started.
+      Three-domain live quality and successful-run latency comparison remain open.
 - [ ] Add human review results, failure analysis, reproduction commands, known
       limitations, and a short demo to the project documentation.
 
@@ -105,5 +157,39 @@ relevant PR or evaluation report.
       - overall, make better use of the screen.
       - Output shall be displayed on next page and there shall be back button to review the input.
       - option to start new search.
+- [ ] Explain evaluation criteria in the UI so users can choose weights confidently.
+      Place an info (ⓘ) or question-mark (?) icon beside each criterion; hovering
+      or clicking should show a tooltip with a plain-language definition, a short
+      example, and what a high/low score means. Make help accessible through
+      keyboard focus and touch as well. Explicitly explain
+      that a high delivery-risk score means low risk, and distinguish problem value
+      from evidence of a real-world pain point. Make the same help available in the
+      results view and Simple mode; Advanced mode should explain weight effects,
+      the 100% total, zero weights, and the difference between scores and hard gates.
+      Add a short description of each preset. Keep user-facing descriptions in one
+      shared catalog, separate from internal retrieval instructions.
 - [ ] Make the code readable and good quality with best practices.
 - [ ] Add good comment documentation throughout.
+
+## Deferred improvement — after current tasks are complete
+
+- [ ] Apply a recovery-first policy throughout the system: request interpretation,
+      planning, adapters, Scout, Library, retrieval, Critic, proposal generation,
+      orchestration, and entry points. Prefer safely completing the remaining
+      steps over making users restart and pay again for completed work.
+      - Preserve validated intermediate results and resume only missing or failed
+        work, respecting memory-only upload retention and existing checkpoints.
+      - Prefer deterministic adjustments before another model call. For E05,
+        clamp planned result counts before search and discard any surplus
+        provider results instead of aborting the run.
+      - Repair only unambiguous output defects; otherwise use bounded retries
+        for the failed step within the remaining shared budget. Skip optional
+        failures only when downstream requirements still hold.
+      - Never bypass privacy, source/citation integrity, coverage requirements,
+        or time/token/cost limits. When safe completion is impossible, return an
+        explicit partial outcome with preserved progress and recovery options;
+        do not present incomplete work as a successful proposal.
+      - Trace adjustments, retries, skipped work, and extra usage; show concise
+        user warnings without silently lowering quality or changing intent.
+      - Add fault-injection tests across stages and both scheduling modes to
+        verify recovery, no unnecessary repeat calls, and unchanged hard gates.

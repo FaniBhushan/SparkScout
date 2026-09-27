@@ -6,6 +6,8 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Protocol
 
+from pydantic import ValidationError
+
 from src.models import (
     CandidateAssessment,
     CandidateIdea,
@@ -62,6 +64,7 @@ class CriticWorker:
             if not library.chunks:
                 return CriticResult(warnings=["No source chunks available for evaluation."])
             evaluations = []
+            warnings = []
             for candidate in candidates:
                 with (
                     self.tracer.span("candidate_evaluation", task_id=candidate.candidate_id)
@@ -70,14 +73,81 @@ class CriticWorker:
                 ):
                     evidence = await self._retrieve(candidate, library, rubric)
                     if not evidence:
-                        raise ValueError(
-                            f"no relevant evidence for candidate {candidate.candidate_id!r}"
+                        warnings.append(
+                            f"Candidate {candidate.candidate_id} was skipped because no relevant evidence was found."
                         )
-                    assessment = await self.judge.assess(request, candidate, evidence, rubric)
-                    evaluations.append(
-                        self._make_evaluation(candidate, assessment, evidence, rubric)
-                    )
-            return CriticResult(evaluations=evaluations)
+                        self._trace_candidate_skip(candidate, "no_relevant_evidence")
+                        continue
+                    try:
+                        assessment = await self.judge.assess(request, candidate, evidence, rubric)
+                    except ValidationError:
+                        warnings.append(
+                            f"Candidate {candidate.candidate_id} was not scored because its Critic response failed schema validation."
+                        )
+                        self._trace_candidate_skip(candidate, "invalid_critic_schema")
+                        continue
+                    repaired_citations = self._fill_unambiguous_chunk_ids(assessment, evidence)
+                    try:
+                        evaluations.append(
+                            self._make_evaluation(candidate, assessment, evidence, rubric)
+                        )
+                    except ValueError as error:
+                        # Never score invalid judgments; keep independent candidates moving.
+                        category = self._invalid_assessment_category(str(error))
+                        warnings.append(
+                            f"Candidate {candidate.candidate_id} was not scored because its Critic {category} check failed."
+                        )
+                        self._trace_candidate_skip(candidate, f"invalid_critic_{category}")
+                        continue
+                    if repaired_citations:
+                        warnings.append(
+                            f"Candidate {candidate.candidate_id} had a source-only citation; "
+                            "its unique retrieved chunk ID was filled in."
+                        )
+                        if self.tracer:
+                            self.tracer.event(
+                                "critic", "citation_chunk_id_repaired", task_id=candidate.candidate_id
+                            )
+            return CriticResult(evaluations=evaluations, warnings=warnings)
+
+    def _trace_candidate_skip(self, candidate: CandidateIdea, reason: str) -> None:
+        if self.tracer:
+            self.tracer.event(
+                "critic",
+                f"candidate_skipped_{reason}",
+                task_id=candidate.candidate_id,
+            )
+
+    @staticmethod
+    def _invalid_assessment_category(message: str) -> str:
+        """Map fixed validation messages to safe, bounded warning categories."""
+
+        if "evidence outside its retrieved context" in message:
+            return "citation"
+        if "exactly the configured" in message:
+            return "assessment_shape"
+        return "consistency"
+
+    @staticmethod
+    def _fill_unambiguous_chunk_ids(
+        assessment: CandidateAssessment, evidence: list[RetrievedChunk]
+    ) -> bool:
+        """Fill a missing chunk ID only when its source has one retrieved chunk."""
+
+        chunks_by_source: dict[str, list[str]] = {}
+        for hit in evidence:
+            chunks_by_source.setdefault(hit.chunk.source_id, []).append(hit.chunk.chunk_id)
+        repaired = False
+        judgments = [*assessment.criteria.values(), *assessment.hard_gates.values()]
+        for judgment in judgments:
+            for reference in judgment.evidence:
+                if reference.chunk_id is not None:
+                    continue
+                matching = chunks_by_source.get(reference.source_id, [])
+                if len(matching) == 1:
+                    reference.chunk_id = matching[0]
+                    repaired = True
+        return repaired
 
     async def _retrieve(
         self,
@@ -165,6 +235,12 @@ class CriticWorker:
                 )
             )
         failed = [f"{gate.gate_id}: {gate.rationale}" for gate in gates if not gate.passed]
+        uncertainty = list(assessment.uncertainty)
+        if any(gate.gate_id == "time_scope" and gate.passed for gate in gates):
+            uncertainty.append(
+                "Time fit is an estimate, not a delivery guarantee; confirm scope, "
+                "dependencies, and available effort before starting."
+            )
         return EvaluationResult(
             evaluation_id=f"eval:{candidate.candidate_id}",
             candidate_id=candidate.candidate_id,
@@ -173,7 +249,7 @@ class CriticWorker:
             gate_passed=not failed,
             total_score=round(sum(item.weighted_score for item in criteria), 4),
             rejection_reasons=failed,
-            uncertainty=assessment.uncertainty,
+            uncertainty=list(dict.fromkeys(uncertainty)),
             revised_candidate=assessment.revised_candidate,
             evaluated_at=datetime.now(timezone.utc),
         )

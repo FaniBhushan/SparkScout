@@ -15,6 +15,7 @@ from .run_configuration import PreparedRun
 from .run_budget import RunBudgetUsage
 from .scout_result import ScoutResult
 from .source_record import SourceRecord
+from .candidate_review import CandidateReviewDecision, assessment_fingerprint
 
 
 class RankedCandidate(ContractModel):
@@ -51,7 +52,7 @@ class OrchestrationResult(ContractModel):
     schema_version: Literal["1.0"] = "1.0"
     run_id: Identifier
     mode: Literal["sequential", "parallel"]
-    status: Literal["completed", "insufficient_coverage"]
+    status: Literal["completed", "partial", "insufficient_coverage"]
     scout: ScoutResult
     library: LibraryResult
     critic: CriticResult
@@ -62,8 +63,36 @@ class OrchestrationResult(ContractModel):
     source_manifest: list[SourceRecord] = Field(default_factory=list)
     ranking: list[RankedCandidate] = Field(default_factory=list)
     finalist_candidate_ids: list[Identifier] = Field(default_factory=list)
+    review_decisions: list[CandidateReviewDecision] = Field(default_factory=list)
     warnings: list[NonEmptyText] = Field(default_factory=list)
     completed_at: datetime
+
+    @model_validator(mode="after")
+    def validate_review_decisions(self) -> "OrchestrationResult":
+        """A review never turns a failed gate into an automatic recommendation."""
+
+        if not self.review_decisions:
+            return self
+        candidates = {item.candidate_id: item for item in self.scout.candidates}
+        evaluations = {item.candidate_id: item for item in self.critic.evaluations}
+        for review in self.review_decisions:
+            candidate = candidates.get(review.candidate_id)
+            evaluation = evaluations.get(review.candidate_id)
+            if review.run_id != self.run_id or candidate is None or evaluation is None:
+                raise ValueError("review must reference a candidate assessed in this run")
+            if not evaluation.can_accept_evidence_risk:
+                raise ValueError("only an isolated evidence gap is eligible for user review")
+            if (review.evaluation_id != evaluation.evaluation_id or
+                    review.assessment_sha256 != assessment_fingerprint(candidate, evaluation)):
+                raise ValueError("review does not match the current candidate assessment")
+            expected_caveats = list(dict.fromkeys([
+                *evaluation.rejection_reasons, *evaluation.uncertainty,
+            ]))
+            if review.caveats != expected_caveats:
+                raise ValueError("review must retain all assessment caveats")
+            if review.candidate_id in self.finalist_candidate_ids:
+                raise ValueError("user-reviewed candidates cannot become automatic finalists")
+        return self
 
     @model_validator(mode="after")
     def validate_proposals(self) -> "OrchestrationResult":

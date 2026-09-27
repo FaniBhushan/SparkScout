@@ -11,6 +11,8 @@ from typing import Literal
 import unicodedata
 from uuid import uuid4
 
+from src.budgets import BudgetExceeded
+from src.failures import failure_code
 from src.models import (
     EvaluationConfiguration,
     CriticResult,
@@ -40,6 +42,7 @@ class OrchestrationError(RuntimeError):
     def __init__(self, stage: str, error: BaseException) -> None:
         self.stage = stage
         self.error_type = type(error).__name__
+        self.code = failure_code(error)
         super().__init__(f"{stage} stage failed ({self.error_type}): {error}")
 
 
@@ -57,6 +60,7 @@ class Orchestrator:
         self.library = library
         self.critic = critic
         self.tracer = tracer
+        self.checkpoint = None
 
     async def run(
         self,
@@ -71,7 +75,7 @@ class Orchestrator:
         if request.domain.casefold() != search.domain.casefold():
             raise ValueError("request and resolved search domains must match")
 
-        run_id = uuid4().hex
+        run_id = self.checkpoint.run_id if self.checkpoint else uuid4().hex
         span = self.tracer.span("orchestrator", task_id=run_id) if self.tracer else nullcontext()
         with span:
             scout_result, library_result = await self._run_branches(request, search, mode)
@@ -99,6 +103,11 @@ class Orchestrator:
                 )
 
             coverage_warnings = self._minimum_coverage_warnings(request, search, library_result)
+            if self.checkpoint:
+                self.checkpoint.write("join", {
+                    "scout": scout_result.model_dump(mode="json"),
+                    "library": library_result.model_dump(mode="json"),
+                }, LibraryResult(sources=source_manifest, chunks=library_result.chunks))
 
             if self.tracer:
                 self.tracer.event("orchestrator", "join_validated", task_id=run_id)
@@ -163,6 +172,8 @@ class Orchestrator:
                                 rubric,
                             )
                         )
+                    except BudgetExceeded:
+                        raise
                     except Exception as error:
                         raise OrchestrationError("critic", error) from error
                     finally:
@@ -182,9 +193,11 @@ class Orchestrator:
                 scout_result.warnings, library_result.warnings, critic_result.warnings,
                 coverage_warnings,
             )
-            status: Literal["completed", "insufficient_coverage"] = "completed"
-            if coverage_warnings or len(finalists) < request.finalist_count:
+            status: Literal["completed", "partial", "insufficient_coverage"] = "completed"
+            if coverage_warnings or not finalists:
                 status = "insufficient_coverage"
+            elif len(finalists) < request.finalist_count:
+                status = "partial"
             if len(finalists) < request.finalist_count and not coverage_warnings:
                 warnings.append(
                     f"Only {len(finalists)} of {request.finalist_count} requested finalists "
@@ -225,24 +238,44 @@ class Orchestrator:
         if mode == "sequential":
             try:
                 scout_result = await self.scout.run(scout_request, search)
+            except BudgetExceeded:
+                raise
             except Exception as error:
                 raise OrchestrationError("scout", error) from error
             try:
                 library_result = await self.library.run(library_request, search)
+            except BudgetExceeded:
+                raise
             except Exception as error:
                 raise OrchestrationError("library", error) from error
             return scout_result, library_result
 
-        outcomes = await asyncio.gather(
-            self.scout.run(scout_request, search),
-            self.library.run(library_request, search),
-            return_exceptions=True,
-        )
-        labels = ("scout", "library")
-        for label, outcome in zip(labels, outcomes):
-            if isinstance(outcome, BaseException):
-                raise OrchestrationError(label, outcome) from outcome
-        return outcomes[0], outcomes[1]
+        tasks = [
+            asyncio.create_task(self.scout.run(scout_request, search)),
+            asyncio.create_task(self.library.run(library_request, search)),
+        ]
+        try:
+            # A required branch failure makes further sibling work unusable.
+            # Cancel and drain it instead of spending the remaining run budget.
+            pending = set(tasks)
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for label, task in zip(("scout", "library"), tasks):
+                    if task not in done:
+                        continue
+                    if task.cancelled():
+                        raise asyncio.CancelledError()
+                    error = task.exception()
+                    if isinstance(error, BudgetExceeded):
+                        raise error
+                    if error is not None:
+                        raise OrchestrationError(label, error) from error
+            return tasks[0].result(), tasks[1].result()
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     @staticmethod
     def _validate_branch_results(request, scout, library) -> None:
@@ -357,7 +390,17 @@ class Orchestrator:
         if len(evaluated_ids) != len(set(evaluated_ids)) or set(evaluated_ids) - candidate_ids:
             raise OrchestrationError("critic", ValueError("Critic returned unknown or duplicate IDs"))
         if set(evaluated_ids) != candidate_ids:
-            raise OrchestrationError("critic", ValueError("Critic did not evaluate every candidate"))
+            missing = candidate_ids - set(evaluated_ids)
+            explicit_skips = {
+                warning.split(" was ", 1)[0].removeprefix("Candidate ")
+                for warning in critic_result.warnings
+                if warning.startswith("Candidate ") and " was skipped " in warning
+                or warning.startswith("Candidate ") and " was not scored " in warning
+            }
+            if not missing.issubset(explicit_skips):
+                raise OrchestrationError(
+                    "critic", ValueError("Critic omitted candidates without explicit skip warnings")
+                )
 
         ordered = sorted(
             evaluations,

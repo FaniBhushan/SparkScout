@@ -122,7 +122,7 @@ async def finalize_proposals(
             criterion_scores=evaluation.criteria,
             total_score=evaluation.total_score,
             risks=draft.risks,
-            unknowns=draft.unknowns,
+            unknowns=list(dict.fromkeys([*draft.unknowns, *evaluation.uncertainty])),
             first_kill_test=draft.first_kill_test,
             evaluation_plan=draft.evaluation_plan,
             citations=draft.citations,

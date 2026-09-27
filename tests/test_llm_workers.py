@@ -13,7 +13,7 @@ from src.llm.client import ModelReply, ModelResponseError
 from src.llm.critic_llm import LLMCandidateJudge
 from src.llm.library_llm import LLMLibraryQueryPlanner
 from src.llm.scout_llm import LLMCandidateGenerator, LLMScoutQueryPlanner
-from src.models import CandidateIdea, InputRequest, LibraryResult, ResolvedSearchConfiguration, SourceRecord
+from src.models import CandidateAssessment, CandidateIdea, InputRequest, LibraryResult, ResolvedSearchConfiguration, SourceRecord
 from src.models.source_record import RetrievalStatus, SourceChunk
 from src.observability import RunTracer
 from src.retrieval import InMemoryRetriever
@@ -154,6 +154,33 @@ class LLMWorkerTests(unittest.IsolatedAsyncioTestCase):
             await LLMScoutQueryPlanner(client, max_output_tokens=500).plan(
                 self.request, self.search
             )
+        self.assertEqual(len(client.calls), 2)
+
+    async def test_schema_validation_retries_once_and_records_each_usage(self) -> None:
+        valid = json.dumps([{
+            "query_id": "scout-q-01", "provider_id": "fixture", "text": "dataset fit",
+            "source_types": ["dataset"], "content_types": ["text"], "max_results": 2,
+        }])
+
+        class SequentialClient:
+            def __init__(self):
+                self.calls = []
+
+            async def complete(self, prompt, *, max_output_tokens):
+                self.calls.append(prompt)
+                return ModelReply(
+                    text="invalid JSON" if len(self.calls) == 1 else valid,
+                    model="fake-model", input_tokens=10, output_tokens=3,
+                )
+
+        client = SequentialClient()
+        queries = await LLMScoutQueryPlanner(client, max_output_tokens=500).plan(
+            self.request, self.search
+        )
+
+        self.assertEqual(queries[0].query_id, "scout-q-01")
+        self.assertEqual(len(client.calls), 2)
+        self.assertIn("Schema correction", client.calls[1])
 
     def _critic_inputs(self):
         candidate = CandidateIdea(
@@ -216,7 +243,7 @@ class LLMWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((usage["prompt_tokens"], usage["completion_tokens"]), (130, 40))
         self.assertEqual(usage["estimated_cost_usd"], 0.002)
 
-    async def test_critic_rejects_unretrieved_citation(self) -> None:
+    async def test_critic_skips_candidate_with_unretrieved_citation(self) -> None:
         candidate, library, rubric = self._critic_inputs()
         bad_reference = {"source_id": "unseen", "chunk_id": "unseen-c0"}
         client = FakeLLMClient(json.dumps({
@@ -230,11 +257,62 @@ class LLMWorkerTests(unittest.IsolatedAsyncioTestCase):
             },
         }))
 
-        with self.assertRaisesRegex(ValueError, "outside its retrieved context"):
-            await CriticWorker(
-                InMemoryRetriever(library.chunks),
-                LLMCandidateJudge(client, max_output_tokens=600),
-            ).run(self.request, [candidate], library, rubric)
+        result = await CriticWorker(
+            InMemoryRetriever(library.chunks),
+            LLMCandidateJudge(client, max_output_tokens=600),
+        ).run(self.request, [candidate], library, rubric)
+        self.assertEqual(result.evaluations, [])
+        self.assertIn("candidate-01", result.warnings[0])
+
+    async def test_critic_fills_source_only_citation_when_chunk_match_is_unique(self) -> None:
+        candidate, library, rubric = self._critic_inputs()
+        source_only_reference = {"source_id": "source-1"}
+        client = FakeLLMClient(json.dumps({
+            "criteria": {
+                key: {"score": 4, "rationale": "Supported by source.", "evidence": [source_only_reference]}
+                for key in rubric.criteria
+            },
+            "hard_gates": {
+                key: {"passed": True, "rationale": "Supported by source.", "evidence": [source_only_reference]}
+                for key in rubric.hard_gates
+            },
+        }))
+
+        result = await CriticWorker(
+            InMemoryRetriever(library.chunks),
+            LLMCandidateJudge(client, max_output_tokens=600),
+        ).run(self.request, [candidate], library, rubric)
+
+        self.assertEqual(len(result.evaluations), 1)
+        reference = result.evaluations[0].criteria[0].evidence[0]
+        self.assertEqual((reference.source_id, reference.chunk_id), ("source-1", "source-1-c0"))
+        self.assertTrue(any("unique retrieved chunk ID" in warning for warning in result.warnings))
+
+    async def test_invalid_critic_candidate_does_not_stop_other_candidates(self) -> None:
+        candidate, library, rubric = self._critic_inputs()
+        second = candidate.model_copy(update={"candidate_id": "candidate-02", "title": "Second idea"})
+
+        class SequenceJudge:
+            async def assess(self, request, current, evidence, evaluation):
+                source = "unseen" if current.candidate_id == "candidate-01" else "source-1"
+                reference = {"source_id": source, "chunk_id": f"{source}-c0"}
+                return CandidateAssessment.model_validate({
+                    "criteria": {
+                        key: {"score": 4, "rationale": "Reviewed.", "evidence": [reference]}
+                        for key in evaluation.criteria
+                    },
+                    "hard_gates": {
+                        key: {"passed": True, "rationale": "Reviewed.", "evidence": [reference]}
+                        for key in evaluation.hard_gates
+                    },
+                })
+
+        result = await CriticWorker(
+            InMemoryRetriever(library.chunks), SequenceJudge()
+        ).run(self.request, [candidate, second], library, rubric)
+
+        self.assertEqual([item.candidate_id for item in result.evaluations], ["candidate-02"])
+        self.assertEqual(len(result.warnings), 1)
 
     async def test_malformed_output_records_usage_and_error(self) -> None:
         client = FakeLLMClient("invalid JSON", input_tokens=20, output_tokens=3)
@@ -249,9 +327,13 @@ class LLMWorkerTests(unittest.IsolatedAsyncioTestCase):
                 tracer.close()
             events = [json.loads(line) for line in tracer.trace_path.read_text().splitlines()]
 
-        self.assertEqual([event["event"] for event in events], ["start", "usage", "error"])
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["start", "usage", "response_retry", "usage", "error"],
+        )
         self.assertEqual(events[1]["completion_tokens"], 3)
         self.assertNotIn("estimated_cost_usd", events[1])
+        self.assertEqual(events[3]["completion_tokens"], 3)
 
     async def test_incomplete_response_records_reported_usage(self) -> None:
         class IncompleteClient:

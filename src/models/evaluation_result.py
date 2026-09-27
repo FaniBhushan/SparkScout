@@ -52,8 +52,24 @@ class EvaluationResult(ContractModel):
     revised_candidate: CandidateIdea | None = None
     evaluated_at: datetime
 
+    @property
+    def can_accept_evidence_risk(self) -> bool:
+        """Only an isolated evidence gap is eligible for a user's risk decision."""
+
+        gates = {gate.gate_id: gate for gate in self.hard_gates}
+        required = {"user_constraints", "evaluation_method", "data_access",
+                    "evidence_sufficiency", "time_scope"}
+        return (
+            not self.gate_passed
+            and len(gates) == len(self.hard_gates)
+            and required <= gates.keys()
+            and {key for key, gate in gates.items() if not gate.passed} == {"evidence_sufficiency"}
+        )
+
     @model_validator(mode="after")
     def validate_totals_and_gates(self) -> "EvaluationResult":
+        if self.revised_candidate is not None and self.revised_candidate.origin == "synthetic":
+            raise ValueError("synthetic exploration must not appear in evaluated results")
         total_weight = sum(item.weight for item in self.criteria)
         if abs(total_weight - 100) > 0.01:
             raise ValueError(f"criterion weights must total 100, got {total_weight:.2f}")

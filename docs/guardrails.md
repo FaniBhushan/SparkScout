@@ -1,8 +1,13 @@
 # Input and output guardrails
 
-The shared checks in `src/guardrails.py` are deterministic and add no model
+The shared checks in `src/guardrails/` are deterministic and add no model
 calls. They supplement the existing contracts, preflight policy checks,
 budgets, citation-ID validation, and code-calculated scoring.
+
+`input_checks.py` owns input-size advisories and warning emission; `privacy.py`
+owns credential/contact detection and safe error messages. `__init__.py` exports
+the shared API so callers continue to import from `src.guardrails`. Evaluation
+cases and their runner remain under `evals/`.
 
 ## Warn versus block
 

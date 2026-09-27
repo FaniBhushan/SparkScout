@@ -20,5 +20,16 @@
     "token_count": 14,
     "start_offset": 0,
     "end_offset": 91
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "soc-paper-002-c1",
+    "source_id": "soc-paper-002",
+    "ordinal": 0,
+    "text": "Aggregate reporting and coarse time bands can help study transit experiences while limiting location detail.",
+    "content_hash": "sha256:soc-paper-002-c1",
+    "token_count": 14,
+    "start_offset": 0,
+    "end_offset": 103
   }
 ]

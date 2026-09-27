@@ -35,6 +35,9 @@ from src.retrieval import InMemoryRetriever
 from src.workers.critic_worker import CriticWorker
 from src.workers.library_worker import LibraryWorker
 from src.workers.scout_worker import ScoutWorker
+from src.persistence import RunStore
+from src.persistence.identity import run_identity
+from src.persistence.workers import CheckpointWorker, CheckpointWriter
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,46 @@ async def run_prepared_research(
     mode: RunMode = "sequential",
     tracer: RunTracer | None = None,
     model_pricing: ModelPricing | None = None,
+    checkpoint_dir=None,
+    resume: bool = False,
+    frozen: bool = False,
+    retry_limit: int = 0,
+) -> OrchestrationResult:
+    """Optionally checkpoint one run; resume requires the identical reviewed inputs."""
+    if retry_limit not in (0, 1):
+        raise ValueError("retry_limit must be zero or one")
+    if (resume or frozen) and checkpoint_dir is None:
+        raise ValueError("resume/frozen replay requires a checkpoint directory")
+    prepared = PreparedRun.model_validate(prepared.model_dump(mode="python"))
+    pricing = model_pricing if model_pricing is not None else getattr(llm_client, "pricing", None)
+    store = None
+    if checkpoint_dir is not None:
+        store = RunStore(checkpoint_dir,
+                         run_identity(prepared, llm_client, available_adapters, output_limits,
+                                      mode, pricing, retry_limit),
+                         resume=resume, frozen=frozen, uploads=bool(prepared.submitted.search.uploads),
+                         tracer=tracer)
+    try:
+        return await _execute_prepared_research(
+            prepared, llm_client, available_adapters, output_limits=output_limits,
+            mode=mode, tracer=tracer, model_pricing=pricing, store=store, retry_limit=retry_limit,
+        )
+    finally:
+        if store:
+            store.close()
+
+
+async def _execute_prepared_research(
+    prepared: PreparedRun,
+    llm_client: LLMClient,
+    available_adapters: Mapping[str, SourceAdapter],
+    *,
+    output_limits: LLMOutputLimits = LLMOutputLimits(),
+    mode: RunMode = "sequential",
+    tracer: RunTracer | None = None,
+    model_pricing: ModelPricing | None = None,
+    store: RunStore | None = None,
+    retry_limit: int = 0,
 ) -> OrchestrationResult:
     """Run only the reviewed effective configuration, without resolving it again."""
 
@@ -141,6 +184,13 @@ async def run_prepared_research(
         raise ValueError("resolved upload hashes do not match reviewed files")
     pricing = model_pricing if model_pricing is not None else getattr(llm_client, "pricing", None)
     budget = RunBudget(prepared.budgets, pricing=pricing, tracer=tracer)
+    budget.retry_limit = retry_limit
+    if store:
+        if store.state["budget"]:
+            budget.restore(store.state["budget"])
+        budget.checkpoint = store
+        if store.read("normalized", prepared.configuration_checksum, PreparedRun) is None:
+            store.write("normalized", prepared.configuration_checksum, prepared)
     run_client = BudgetedLLMClient(llm_client, budget)
     run_adapters = {
         provider_id: BudgetedSourceAdapter(available_adapters[provider_id], provider_id, budget)
@@ -178,11 +228,24 @@ async def run_prepared_research(
     writer = LLMProposalWriter(
         run_client, max_output_tokens=output_limits.final_proposal, tracer=tracer
     )
+    if store:
+        from src.models import ScoutResult, LibraryResult, CriticResult
+        scout = CheckpointWorker(scout, store, "scout", ScoutResult)
+        library = CheckpointWorker(library, store, "library", LibraryResult)
+        critic = CheckpointWorker(critic, store, "critic", CriticResult)
+        writer = CheckpointWriter(writer, store)
+
     async def execute() -> OrchestrationResult:
-        result = await Orchestrator(scout, library, critic, tracer=tracer).run(
-            request, search, rubric, mode=mode
-        )
+        coordinator = Orchestrator(scout, library, critic, tracer=tracer)
+        coordinator.checkpoint = store
+        async def orchestrate():
+            return await coordinator.run(request, search, rubric, mode=mode)
+        result = await store.run_stage("evaluated", prepared.configuration_checksum,
+                                       OrchestrationResult, orchestrate) if store else await orchestrate()
         try:
+            if store:
+                return await store.run_stage("finalized", result.model_dump(mode="json"),
+                    OrchestrationResult, lambda: finalize_proposals(request, result, writer))
             return await finalize_proposals(request, result, writer)
         except ProposalCoverageError as error:
             # Evidence insufficiency is a reportable outcome, not a fabricated draft.
@@ -193,9 +256,11 @@ async def run_prepared_research(
             return OrchestrationResult.model_validate(data)
 
     try:
-        finalized = await asyncio.wait_for(execute(), timeout=prepared.budgets.max_elapsed_seconds)
+        finalized = await asyncio.wait_for(execute(), timeout=max(0.001, budget.remaining_seconds()))
     except asyncio.TimeoutError as error:
         raise BudgetExceeded("run time budget exhausted") from error
+    finally:
+        budget.persist()
     if tracer:
         tracer.event(
             "application", "run_finalized", task_id=finalized.run_id,

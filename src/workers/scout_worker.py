@@ -18,7 +18,8 @@ from src.models import (
 )
 from src.models.source_record import RetrievalStatus
 from src.observability import RunTracer
-from src.workers.source_filter import source_is_within_age_limit
+from src.workers.source_filter import same_source_content, source_is_within_age_limit
+from src.workers.query_limits import bound_query_plan
 from src.workers.upload_query import include_upload_query
 
 
@@ -75,8 +76,11 @@ class ScoutWorker:
             raise ValueError("request and resolved search domains must match")
 
         queries = include_upload_query(await self.query_planner.plan(request, search), search, ScoutQuery)
+        queries, warnings = bound_query_plan(queries, search)
         self._validate_queries(queries, search)
         if self.tracer:
+            if warnings:
+                self.tracer.event("scout", "query_plan_adjusted", count=len(warnings))
             self.tracer.budget("scout", "search_queries", len(queries), search.max_queries)
 
         sources: list[SourceRecord] = []
@@ -142,7 +146,7 @@ class ScoutWorker:
                     sources.append(source)
                     seen_sources[source.source_id] = source
                     type_counts[source.source_type] += 1
-                elif previous != source:
+                elif not same_source_content(previous, source):
                     raise ValueError(
                         f"conflicting records have the same source ID {source.source_id!r}"
                     )
@@ -157,17 +161,19 @@ class ScoutWorker:
         if not available_sources:
             return ScoutResult(
                 sources=sources,
-                warnings=["No usable sources were found for candidate discovery."],
+                warnings=[*warnings, "No usable sources were found for candidate discovery."],
             )
 
         trace_span = self.tracer.span("candidate_generation") if self.tracer else nullcontext()
         with trace_span:
             candidates = await self.candidate_generator.generate(request, available_sources)
+        # Apply the boundary for injected generators as well as the LLM implementation.
+        candidates = [item for item in candidates if item.origin != "synthetic"]
         if self.tracer:
             self.tracer.budget(
                 "scout", "candidate_count", len(candidates), request.desired_candidate_count
             )
-        warnings = []
+        warnings = list(warnings)
         if len(candidates) < request.desired_candidate_count:
             warnings.append(
                 f"Found {len(candidates)} of {request.desired_candidate_count} requested candidates."
@@ -179,8 +185,6 @@ class ScoutWorker:
         queries: list[ScoutQuery],
         search: ResolvedSearchConfiguration,
     ) -> None:
-        if len(queries) > search.max_queries:
-            raise ValueError("query planner exceeded max_queries")
         if len({query.query_id for query in queries}) != len(queries):
             raise ValueError("query IDs must be unique")
 
@@ -196,5 +200,3 @@ class ScoutWorker:
                     f"query {query.query_id!r} requests an unavailable content type "
                     f"from provider {query.provider_id!r}"
                 )
-            if query.max_results > search.max_results_per_query:
-                raise ValueError(f"query {query.query_id!r} exceeds max_results_per_query")

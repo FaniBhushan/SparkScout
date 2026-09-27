@@ -20,29 +20,6 @@ class RetrievalStatus(str, Enum):
     ERROR = "error"
 
 
-class SourceRecord(ContractModel):
-    schema_version: Literal["1.0"] = "1.0"
-    source_id: Identifier
-    provider: Identifier
-    source_type: Identifier
-    title: NonEmptyText
-    authors_or_owners: list[NonEmptyText] = Field(default_factory=list)
-    published_at: date | datetime | None = None
-    captured_at: datetime
-    canonical_url: HttpUrl | None = None
-    query_id: Identifier
-    domain_tags: list[NonEmptyText] = Field(default_factory=list)
-    abstract_or_snippet: NonEmptyText | None = None
-    language: str | None = Field(default=None, pattern=r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$")
-    # Retained only in memory until Library builds chunks; never serialized into manifests.
-    full_text: str | None = Field(default=None, exclude=True, repr=False)
-    license_access_note: NonEmptyText | None = None
-    content_hash: NonEmptyText
-    retrieval_status: RetrievalStatus
-    provider_record_id: NonEmptyText | None = None
-    metadata_conflicts: dict[str, list[str]] = Field(default_factory=dict)
-
-
 class SourceChunk(ContractModel):
     schema_version: Literal["1.0"] = "1.0"
     chunk_id: Identifier
@@ -61,4 +38,35 @@ class SourceChunk(ContractModel):
             raise ValueError("start_offset and end_offset must be supplied together")
         if self.start_offset is not None and self.end_offset <= self.start_offset:
             raise ValueError("end_offset must be greater than start_offset")
+        return self
+
+
+class SourceRecord(ContractModel):
+    schema_version: Literal["1.0"] = "1.0"
+    source_id: Identifier
+    provider: Identifier
+    source_type: Identifier
+    title: NonEmptyText
+    authors_or_owners: list[NonEmptyText] = Field(default_factory=list)
+    published_at: date | datetime | None = None
+    captured_at: datetime
+    canonical_url: HttpUrl | None = None
+    query_id: Identifier
+    domain_tags: list[NonEmptyText] = Field(default_factory=list)
+    abstract_or_snippet: NonEmptyText | None = None
+    language: str | None = Field(default=None, pattern=r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$")
+    # Retained only in memory until Library builds chunks; never serialized into manifests.
+    full_text: str | None = Field(default=None, exclude=True, repr=False)
+    # Adapter passages travel to Library without inflating Scout's source prompt.
+    evidence_chunks: list[SourceChunk] = Field(default_factory=list, exclude=True, repr=False)
+    license_access_note: NonEmptyText | None = None
+    content_hash: NonEmptyText
+    retrieval_status: RetrievalStatus
+    provider_record_id: NonEmptyText | None = None
+    metadata_conflicts: dict[str, list[str]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_evidence_sources(self) -> "SourceRecord":
+        if any(chunk.source_id != self.source_id for chunk in self.evidence_chunks):
+            raise ValueError("evidence chunk must belong to its source record")
         return self

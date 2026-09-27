@@ -1,6 +1,7 @@
 """Public data contracts for ScoutSpark."""
 
 from .candidate_idea import CandidateIdea
+from .candidate_review import CandidateReviewDecision
 from .candidate_assessment import CandidateAssessment, CriterionJudgment, GateJudgment
 from .critic_result import CriticResult
 from .evaluation_configuration import CriterionDefinition, EvaluationConfiguration
@@ -58,6 +59,7 @@ __all__ = [
     "BudgetSelection",
     "CandidateAssessment",
     "CandidateIdea",
+    "CandidateReviewDecision",
     "CriticResult",
     "CriterionDefinition",
     "CriterionJudgment",

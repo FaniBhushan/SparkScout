@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "dataset_version": "0.1.0",
+  "dataset_version": "0.3.0",
   "fixture_kind": "synthetic",
   "development_cases": [
     "cases/development/robotics_agriculture_01.json",

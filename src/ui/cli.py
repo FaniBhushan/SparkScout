@@ -1,4 +1,4 @@
-"""CLI for reviewed configurations, prompt drafts, and frozen evaluation cases."""
+"""Command-line interface; run with ``python -m src.ui.cli``."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from src.adapters import build_available_adapters
 from src.adapters.user_upload import MAX_FILE_BYTES
 from src.application import run_prepared_research
 from src.demo import OfflineDemoClient
+from src.environment import load_local_environment
 from src.guardrails import emit_advisories, safe_error_message
 from src.interpretation import confirm_interpretation
 from src.llm.client import ModelPricing, OpenAITextClient
@@ -54,6 +55,7 @@ def _submitted_input(
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_local_environment()
     parser = argparse.ArgumentParser(description="Run ScoutSpark or draft a reviewed request")
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument("--case", type=Path, help="evaluation case JSON with a fixture set")
@@ -74,11 +76,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--offline-demo", action="store_true",
                         help="use a deterministic local model with frozen sources")
     parser.add_argument("--mode", choices=("sequential", "parallel"), default="sequential")
+    parser.add_argument("--checkpoint-dir", type=Path, help="opt-in local run checkpoint directory")
+    parser.add_argument("--resume", action="store_true", help="reuse valid stages and preserve spent budget")
+    parser.add_argument("--frozen-replay", action="store_true", help="resume using saved stages only")
+    parser.add_argument("--retry-once", action="store_true", help="retry transient failures once within budgets")
     parser.add_argument("--search-preset", default="balanced", help="legacy --case/--request only")
     parser.add_argument("--rubric-preset", default="balanced", help="legacy --case/--request only")
     parser.add_argument("--input-rate", type=float, help="trusted USD per million input tokens")
     parser.add_argument("--output-rate", type=float, help="trusted USD per million output tokens")
     args = parser.parse_args(argv)
+    if (args.resume or args.frozen_replay) and args.checkpoint_dir is None:
+        parser.error("resume/replay requires --checkpoint-dir")
+    if args.prompt_file and args.checkpoint_dir:
+        parser.error("checkpointing applies to research, after prompt review")
 
     if (args.review_file is None) != (args.draft_file is None):
         parser.error("--draft-file and --review-file must be supplied together")
@@ -161,7 +171,9 @@ def main(argv: list[str] | None = None) -> int:
         if client is None:
             client = OpenAITextClient(args.model, pricing=pricing)
     result = asyncio.run(run_prepared_research(
-        prepared, client, adapters, mode=args.mode
+        prepared, client, adapters, mode=args.mode,
+        checkpoint_dir=args.checkpoint_dir, resume=args.resume or args.frozen_replay,
+        frozen=args.frozen_replay, retry_limit=int(args.retry_once),
     ))
     print(result.model_dump_json(indent=2))
     return 0

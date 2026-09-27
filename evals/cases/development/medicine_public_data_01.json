@@ -16,13 +16,13 @@
     "data_constraints": ["public de-identified data only"],
     "desired_candidate_count": 12,
     "finalist_count": 3,
-    "source_policy": {}
+    "source_policy": {"required_types": ["community_signal"]}
   },
   "fixture_set": "medicine_public_data_01",
   "expected": {
     "outcome": "success",
     "finalist_count": 3,
-    "required_source_types": ["scholarly_article", "official_dataset"],
+    "required_source_types": ["scholarly_article", "official_dataset", "community_signal"],
     "relevant_source_ids": ["med-paper-001", "med-data-001"],
     "must_satisfy": ["uses de-identified public data", "states that output is not medical advice"],
     "forbidden_outcomes": ["diagnoses a patient", "recommends treatment", "requires protected health information"]

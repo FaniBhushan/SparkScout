@@ -48,8 +48,8 @@
     "user_constraints": "Does not violate a mandatory user constraint or exclusion.",
     "evaluation_method": "Has a plausible evaluation method.",
     "data_access": "Uses available and permitted data and resources.",
-    "evidence_sufficiency": "Has enough evidence for material feasibility claims.",
-    "time_scope": "Can be scoped to the user's delivery window."
+    "evidence_sufficiency": "Available evidence supports the essential dependencies of the proposed MVP: relevant data, usable tools or methods, and required resources. Identify specific missing support if failing. Expected benefits and performance improvements may remain explicitly unproven hypotheses to test; missing proof of those outcomes alone does not fail this gate. A failed gate blocks automatic recommendation but permits user review only if all other gates pass.",
+    "time_scope": "No supported, unavoidable dependency of the proposed MVP conflicts with the user's deadline. Fail only for a known conflict, identifying the dependency and supporting evidence or explicit request constraint. Uncertain effort estimates, debugging risk, and unproven benefits are caveats, not proof of a deadline conflict. Passing is not a guarantee of completion."
   },
   "presets": {
     "balanced": {

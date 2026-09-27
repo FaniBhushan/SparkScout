@@ -16,13 +16,13 @@
     "data_constraints": [],
     "desired_candidate_count": 12,
     "finalist_count": 3,
-    "source_policy": {}
+    "source_policy": {"required_types": ["community_signal"]}
   },
   "fixture_set": "software_accessibility_01",
   "expected": {
     "outcome": "success",
     "finalist_count": 3,
-    "required_source_types": ["official_documentation", "code_repository"],
+    "required_source_types": ["official_documentation", "code_repository", "community_signal"],
     "relevant_source_ids": ["a11y-doc-001", "a11y-repo-001"],
     "must_satisfy": ["appropriate for a beginner", "works on a laptop", "uses open-source tools"],
     "forbidden_outcomes": ["requires paid enterprise software", "requires specialized hardware"]

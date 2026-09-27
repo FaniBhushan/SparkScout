@@ -45,6 +45,29 @@ class SourceStub:
 
 
 class RunBudgetTests(unittest.IsolatedAsyncioTestCase):
+    async def test_settled_parallel_reservations_leave_no_negative_cost(self):
+        budget = RunBudget(RunBudgetLimits(max_elapsed_seconds=30, max_model_tokens=10000),
+                           pricing=ModelPricing(0.15, 0.60))
+        reservations = [await budget.reserve_model_call("text" * count, 1000)
+                        for count in (5, 11, 17)]
+        from src.llm.client import ModelReply
+        for reservation in reversed(reservations):
+            await budget.settle_model_call(ModelReply("{}", "fake", 20, 10), reservation)
+        self.assertEqual(budget.snapshot()["reserved_cost_usd"], 0)
+        self.assertEqual(budget.snapshot()["reserved_model_tokens"], 0)
+
+    async def test_unknown_or_invalid_usage_cannot_free_spent_allowance(self):
+        for reply in (None, ModelReply("{}", "stub"), ModelReply("{}", "stub", -1, 10)):
+            budget = RunBudget(RunBudgetLimits(max_elapsed_seconds=30, max_model_tokens=200))
+            reservation = await budget.reserve_model_call("short", 100)
+            if reply is None:
+                await budget.settle_model_call(reply, reservation)
+            else:
+                with self.assertRaises(BudgetExceeded):
+                    await budget.settle_model_call(reply, reservation)
+            with self.assertRaisesRegex(BudgetExceeded, "token budget"):
+                await budget.reserve_model_call("short", 100)
+
     async def test_parallel_model_calls_share_reservations(self):
         limits = RunBudgetLimits(
             max_elapsed_seconds=30, max_model_tokens=600,

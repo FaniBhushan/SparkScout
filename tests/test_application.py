@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from src.adapters import FrozenFixtureAdapter
 from src.application import LLMOutputLimits, run_prepared_research, run_research
-from src.cli import main
+from src.ui.cli import main
 from src.llm.client import ModelReply
 from src.models import BudgetSelection, InputRequest, SubmittedRunConfiguration
 from src.budgets import BudgetExceeded
@@ -142,7 +142,7 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.mode, "sequential")
         self.assertEqual(result.finalist_candidate_ids, ["candidate-01"])
-        self.assertEqual(result.retrieval_index.indexed_chunk_count, 3)
+        self.assertEqual(result.retrieval_index.indexed_chunk_count, 6)
         self.assertEqual(len(result.final_proposals), 1)
         self.assertEqual(result.final_proposals[0].total_score,
                          result.critic.evaluations[0].total_score)
@@ -298,7 +298,7 @@ class CLITests(unittest.TestCase):
         output = StringIO()
         with (
             patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
-            patch("src.cli.OpenAITextClient", return_value=FakeLLMClient()),
+            patch("src.ui.cli.OpenAITextClient", return_value=FakeLLMClient()),
             redirect_stdout(output),
         ):
             exit_code = main(["--case", str(case_path), "--model", "fake"])
@@ -306,7 +306,7 @@ class CLITests(unittest.TestCase):
         result = json.loads(output.getvalue())
         self.assertEqual(exit_code, 0)
         self.assertEqual(result["mode"], "sequential")
-        self.assertEqual(result["status"], "insufficient_coverage")
+        self.assertEqual(result["status"], "partial")
         self.assertEqual(len(result["final_proposals"]), 1)
         self.assertEqual({source["provider"] for source in result["source_manifest"]},
                          {"frozen_fixture"})
@@ -324,7 +324,7 @@ class CLITests(unittest.TestCase):
             request_path.write_text(request.model_dump_json(), encoding="utf-8")
             with (
                 patch.dict("os.environ", {"OPENAI_API_KEY": "offline-test"}),
-                patch("src.cli.OpenAITextClient", return_value=FakeLLMClient()),
+                patch("src.ui.cli.OpenAITextClient", return_value=FakeLLMClient()),
                 redirect_stdout(output),
             ):
                 exit_code = main([

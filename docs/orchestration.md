@@ -4,8 +4,22 @@
 validates request/search domain agreement, runs Scout and Library sequentially
 or concurrently, validates their join, then calls Critic. Finalists are
 gate-passing candidates ordered by weighted score descending and candidate ID
-ascending for ties. If too few pass,
-the result is marked `insufficient_coverage`; gates are never relaxed.
+ascending for ties. If fewer than requested pass but at least one can proceed,
+the result is marked `partial` and available finalists are still drafted. If none
+pass, or minimum source coverage fails, the status is `insufficient_coverage`.
+Requested proposal counts are targets; gates are never relaxed to fill them.
+Evidence-only failures remain visible for explicit user review after the run.
+User choices are recorded separately and do not alter automatic ranking,
+finalists, or completion status; see [candidate review](candidate_scoring.md).
+
+Scout generation uses small batches sized to the output-token cap. Already
+validated ideas survive a later malformed batch; the run's token/cost/time caps
+still apply. Compact prior-idea summaries prevent repeating the same work.
+Speculative ideas with `origin=synthetic` may guide internal exploration but are
+removed before Scout results, Critic selection, UI display, and downloads. They
+never count as supported finalists. Frozen test sources remain separately labeled
+synthetic fixtures; source-backed ideas in those tests are simulations, not real
+research evidence.
 
 At the join, the coordinator checks candidate ID uniqueness and count, candidate
 citations against Scout sources, Library chunk/source integrity, and source-record
@@ -16,6 +30,15 @@ required by the request or domain route before Critic runs. `ResolvedSearchConfi
 that minimum to one for direct construction; the search presets define three. The
 preset is resolved in `src/application.py`. Runs below the active threshold
 return `insufficient_coverage` without spending tokens on Critic.
+
+Library uses `src/workers/evidence.py` to combine available source text with
+adapter-supplied passages. The frozen adapter reads these passages from
+`chunks.json`; their source/chunk IDs remain available for citations. Distinct
+source summaries are retained as separate chunks. Transport passages are excluded
+from Scout's source JSON and counted in provider byte usage. They become normal
+Library chunks subject to corpus, chunk-count, and Critic context limits. This
+does not add embedding or model calls. Source metadata is not automatically
+copied into every passage.
 
 After a valid join, the coordinator builds a fresh `HybridInMemoryRetriever` for
 that run. It combines deterministic local TF-IDF cosine and lexical overlap;
@@ -52,7 +75,8 @@ from user text; it is reviewed before research starts.
 from the corresponding Pydantic contract. `parse_model_output(name, response)`
 validates raw JSON or Python output against the same contract. Worker interfaces
 remain injected; `src/application.py` wires them to an injected LLM client, while
-`src/cli.py` uses the existing OpenAI client for frozen-fixture runs. Durable
-checkpoints/resume remain future work. `src/application.py` applies the reviewed
+`src/ui/cli.py` uses the existing OpenAI client for frozen-fixture runs. Optional
+[checkpoints and resume](checkpoints.md) preserve validated stage outputs and budgets.
+`src/application.py` applies the reviewed
 time/token budgets and shared provider-call limits around both branches and final
 proposal writing. Cost limits require configured rates and are off by default.

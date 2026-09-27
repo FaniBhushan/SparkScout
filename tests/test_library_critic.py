@@ -130,7 +130,7 @@ class LibraryCriticTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_evaluation_configuration(weights=weights)
 
-    def test_critic_rejects_citations_outside_retrieved_context(self):
+    def test_critic_skips_candidate_with_citations_outside_retrieved_context(self):
         class BadJudge(Judge):
             async def assess(self, request, candidate, evidence, rubric):
                 assessment = await super().assess(request, candidate, evidence, rubric)
@@ -142,12 +142,14 @@ class LibraryCriticTests(unittest.TestCase):
         library = asyncio.run(
             LibraryWorker({"fixture": Adapter()}, Planner()).run(self.request, self.search)
         )
-        with self.assertRaisesRegex(ValueError, "outside its retrieved context"):
-            asyncio.run(
-                CriticWorker(InMemoryRetriever(library.chunks), BadJudge()).run(
-                    self.request, [self.candidate], library, load_evaluation_configuration()
-                )
+        result = asyncio.run(
+            CriticWorker(InMemoryRetriever(library.chunks), BadJudge()).run(
+                self.request, [self.candidate], library, load_evaluation_configuration()
             )
+        )
+        self.assertEqual(result.evaluations, [])
+        self.assertEqual(len(result.warnings), 1)
+        self.assertIn("citation check failed", result.warnings[0])
 
     def test_failed_hard_gate_disqualifies_a_high_scoring_candidate(self):
         class FailingJudge(Judge):

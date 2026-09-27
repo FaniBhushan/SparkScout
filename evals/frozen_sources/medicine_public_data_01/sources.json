@@ -36,5 +36,43 @@
     "retrieval_status": "success",
     "provider_record_id": "fixture-med-data-001",
     "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "med-data-002",
+    "provider": "fixture",
+    "source_type": "official_dataset",
+    "title": "Public aggregate health service indicators",
+    "authors_or_owners": ["Synthetic Public Health Agency"],
+    "published_at": "2025-07-16",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/med-data-002",
+    "query_id": "med-query-003",
+    "domain_tags": ["healthcare", "public data", "aggregate indicators"],
+    "abstract_or_snippet": "Synthetic public aggregate indicators suitable for non-clinical service analysis; no patient-level records or diagnostic labels are included.",
+    "license_access_note": "Synthetic fixture representing public aggregate data.",
+    "content_hash": "sha256:med-data-002",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-med-data-002",
+    "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "med-community-001",
+    "provider": "fixture",
+    "source_type": "community_signal",
+    "title": "Health operations analysts discuss aggregate reporting",
+    "authors_or_owners": ["Synthetic Health Operations Forum"],
+    "published_at": "2025-08-06",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/med-community-001",
+    "query_id": "med-query-004",
+    "domain_tags": ["medicine", "health operations", "privacy"],
+    "abstract_or_snippet": "Synthetic analyst reports describe difficulty comparing service patterns using only aggregate public data. The reports are anecdotal and contain no patient information or clinical outcomes.",
+    "license_access_note": "Synthetic fixture for tests; not real-world evidence.",
+    "content_hash": "sha256:med-community-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-med-community-001",
+    "metadata_conflicts": {}
   }
 ]

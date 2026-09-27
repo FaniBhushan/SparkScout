@@ -18,6 +18,10 @@ def load_json(path: Path) -> Any:
 def validate() -> list[str]:
     errors: list[str] = []
     manifest = load_json(EVALS_DIR / "manifest.json")
+    search_defaults = load_json(EVALS_DIR.parent / "config" / "search_defaults.json")
+    minimum_sources = min(
+        preset["minimum_source_count"] for preset in search_defaults["presets"].values()
+    )
     seen_case_ids: set[str] = set()
 
     split_entries = (
@@ -60,6 +64,21 @@ def validate() -> list[str]:
             relevant_ids = set(case.get("expected", {}).get("relevant_source_ids", []))
             if unknown := relevant_ids - source_ids:
                 errors.append(f"{case_id}: gold labels reference unknown sources {sorted(unknown)}")
+
+            expected = case.get("expected", {})
+            if expected.get("outcome") == "success":
+                if len(sources) < minimum_sources:
+                    errors.append(
+                        f"{case_id}: success fixture has {len(sources)} sources; "
+                        f"configured minimum is {minimum_sources}"
+                    )
+                available_types = {record["source_type"] for record in sources}
+                missing_types = set(expected.get("required_source_types", [])) - available_types
+                if missing_types:
+                    errors.append(
+                        f"{case_id}: success fixture lacks required source types "
+                        f"{sorted(missing_types)}"
+                    )
 
             for record in sources:
                 note = record.get("license_access_note", "").lower()

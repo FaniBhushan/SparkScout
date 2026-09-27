@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from src.models import (
     CandidateAssessment,
@@ -88,8 +88,33 @@ def parse_model_output(name: PromptName, output: str | bytes | object) -> object
     except KeyError:
         raise ValueError(f"unknown prompt template: {name!r}") from None
     if isinstance(output, (str, bytes)):
-        return output_type.validate_json(output, strict=True)
+        try:
+            return output_type.validate_json(output, strict=True)
+        except ValidationError:
+            repaired = repair_known_candidate_field(output) if name == "scout_candidate_generator" else None
+            if repaired is None:
+                raise
+            return output_type.validate_json(repaired, strict=True)
     return output_type.validate_python(output, strict=True)
+
+
+def repair_known_candidate_field(output: str | bytes) -> str | None:
+    """Repair one unambiguous candidate key typo; leave all other invalid output intact."""
+
+    try:
+        value = json.loads(output)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(value, list):
+        return None
+    changed = False
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        if "why_it.matters" in item and "why_it_matters" not in item:
+            item["why_it_matters"] = item.pop("why_it.matters")
+            changed = True
+    return json.dumps(value, ensure_ascii=False) if changed else None
 
 
 def _json_default(value: object) -> object:

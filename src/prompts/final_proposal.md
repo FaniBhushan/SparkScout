@@ -12,6 +12,9 @@ The candidate's identity, rank, and numeric scores are fixed by code.
 - Provide objective evaluation metrics and measurable success criteria; do not
   invent measured results or guarantee access to data, tools, or licenses.
 - Explain the gap or differentiation cautiously when the supplied evidence is weak.
+- Carry the evaluator's evidence and timing caveats into `unknowns` or `risks`.
+  Passing the time gate means no known unavoidable deadline conflict; it does
+  not guarantee delivery. Keep expected benefits explicitly unproven until tested.
 - Cite material claims with the exact supplied source and chunk IDs. Do not cite
   an unseen source or chunk. Include at least one supporting chunk citation.
 - A valid citation ID is not proof of support. Omit unsupported factual claims,

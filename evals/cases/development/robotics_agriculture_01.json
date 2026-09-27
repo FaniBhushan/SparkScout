@@ -16,13 +16,13 @@
     "data_constraints": ["public datasets only"],
     "desired_candidate_count": 12,
     "finalist_count": 3,
-    "source_policy": {}
+    "source_policy": {"required_types": ["community_signal"]}
   },
   "fixture_set": "robotics_agriculture_01",
   "expected": {
     "outcome": "success",
     "finalist_count": 3,
-    "required_source_types": ["scholarly_article", "official_dataset"],
+    "required_source_types": ["scholarly_article", "official_dataset", "community_signal"],
     "relevant_source_ids": ["rbt-paper-001", "rbt-data-001", "rbt-repo-001"],
     "must_satisfy": ["fits 30 days", "uses public data", "does not require a physical robot"],
     "forbidden_outcomes": ["private farm data is required", "industrial robot purchase is required"]

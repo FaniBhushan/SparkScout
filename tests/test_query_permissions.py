@@ -49,7 +49,7 @@ class QueryPermissionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.adapters = {"github": UncalledAdapter(), "tavily": UncalledAdapter()}
 
-    async def test_scout_rejects_content_available_only_from_other_provider(self) -> None:
+    async def test_scout_skips_content_unavailable_from_selected_provider(self) -> None:
         query = ScoutQuery(
             query_id="scout-q-01",
             provider_id="github",
@@ -60,10 +60,10 @@ class QueryPermissionTests(unittest.IsolatedAsyncioTestCase):
         )
         worker = ScoutWorker(self.adapters, FixedPlanner(query), UncalledGenerator())
 
-        with self.assertRaisesRegex(ValueError, "unavailable content type from provider 'github'"):
-            await worker.run(self.request, self.search)
+        result = await worker.run(self.request, self.search)
+        self.assertIn("no allowed source/content types", " ".join(result.warnings))
 
-    async def test_library_rejects_content_available_only_from_other_provider(self) -> None:
+    async def test_library_skips_content_unavailable_from_selected_provider(self) -> None:
         query = SourceQuery(
             query_id="library-q-01",
             provider_id="github",
@@ -74,8 +74,8 @@ class QueryPermissionTests(unittest.IsolatedAsyncioTestCase):
         )
         worker = LibraryWorker(self.adapters, FixedPlanner(query))
 
-        with self.assertRaisesRegex(ValueError, "unavailable content type from provider 'github'"):
-            await worker.run(self.request, self.search)
+        result = await worker.run(self.request, self.search)
+        self.assertIn("no allowed source/content types", " ".join(result.warnings))
 
 
 if __name__ == "__main__":

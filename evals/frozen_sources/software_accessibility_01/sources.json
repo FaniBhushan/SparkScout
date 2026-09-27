@@ -36,5 +36,43 @@
     "retrieval_status": "success",
     "provider_record_id": "fixture-a11y-repo-001",
     "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "a11y-doc-002",
+    "provider": "fixture",
+    "source_type": "official_documentation",
+    "title": "Accessible form validation checklist",
+    "authors_or_owners": ["Synthetic Standards Body"],
+    "published_at": "2025-06-12",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/a11y-doc-002",
+    "query_id": "a11y-query-003",
+    "domain_tags": ["accessibility", "forms", "testing"],
+    "abstract_or_snippet": "Synthetic guidance for testing form labels and validation messages with keyboard navigation and screen readers.",
+    "license_access_note": "Synthetic fixture for tests; not authoritative guidance.",
+    "content_hash": "sha256:a11y-doc-002",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-a11y-doc-002",
+    "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "a11y-community-001",
+    "provider": "fixture",
+    "source_type": "community_signal",
+    "title": "Keyboard and screen-reader testing frustrations",
+    "authors_or_owners": ["Synthetic Accessibility Forum"],
+    "published_at": "2025-07-09",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/a11y-community-001",
+    "query_id": "a11y-query-004",
+    "domain_tags": ["accessibility", "testing", "community"],
+    "abstract_or_snippet": "Synthetic user reports describe difficulty identifying keyboard navigation and screen-reader labeling problems before releasing small web projects. These are anecdotal reports, not prevalence estimates.",
+    "license_access_note": "Synthetic fixture for tests; not real-world evidence.",
+    "content_hash": "sha256:a11y-community-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-a11y-community-001",
+    "metadata_conflicts": {}
   }
 ]

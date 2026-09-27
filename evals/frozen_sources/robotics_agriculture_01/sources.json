@@ -55,5 +55,24 @@
     "retrieval_status": "success",
     "provider_record_id": "fixture-rbt-repo-001",
     "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "rbt-community-001",
+    "provider": "fixture",
+    "source_type": "community_signal",
+    "title": "Grower reports on crop scouting",
+    "authors_or_owners": ["Synthetic Grower Forum"],
+    "published_at": "2025-04-18",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/rbt-community-001",
+    "query_id": "rbt-query-004",
+    "domain_tags": ["robotics", "agriculture", "crop monitoring"],
+    "abstract_or_snippet": "Synthetic anecdotal posts describe difficulty spotting early leaf disease during routine crop scouting. The posts provide no quantified yield losses or validated demand.",
+    "license_access_note": "Synthetic fixture for tests; not real-world evidence.",
+    "content_hash": "sha256:rbt-community-001",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-rbt-community-001",
+    "metadata_conflicts": {}
   }
 ]

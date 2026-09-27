@@ -6,6 +6,7 @@ import streamlit as st
 
 from src.guardrails import SensitiveContentError, check_privacy, safe_error_message
 from src.models import PromptInterpretationDraft
+from .candidate_review import candidate_review_view
 
 
 def _show_draft(draft: PromptInterpretationDraft, prompt: str) -> None:
@@ -49,6 +50,7 @@ def _result_view(result) -> None:
         st.warning(warning)
     if result.ranking:
         st.dataframe([row.model_dump(mode="json") for row in result.ranking], hide_index=True)
+    result = candidate_review_view(result)
     with st.expander("Selected source receipts", expanded=False):
         st.dataframe([
             {
@@ -65,6 +67,8 @@ def _result_view(result) -> None:
             st.text(proposal.problem_statement)
             st.text("MVP:\n" + "\n".join(proposal.scoped_mvp))
             st.write("Evaluation:", proposal.evaluation_plan.model_dump(mode="json"))
+            for caveat in proposal.unknowns:
+                st.warning(caveat)
             st.dataframe([
                 {
                     "criterion": score.criterion_id,

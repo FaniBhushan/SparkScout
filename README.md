@@ -1,5 +1,11 @@
 # ScoutSpark
 
+Local credentials can be set in the repository-root `.env` using
+`OPENAI_API_KEY`, `TAVILY_API_KEY`, and optional `GITHUB_TOKEN`. CLI, Streamlit
+launcher, and paid claim-support evaluations load it automatically; existing
+environment variables take precedence. Never commit this ignored file.
+Set `PYTHON_DOTENV_DISABLED=1` in CI/offline tests to skip local loading.
+
 ScoutSpark helps students find and assess capstone project ideas for a chosen
 domain, deadline, and set of resources. Scout discovers candidate ideas while
 Library independently gathers evidence. Critic evaluates each candidate against
@@ -14,16 +20,18 @@ run-scoped budgets. The CLI and Streamlit UI support synthetic offline runs;
 both can also select ready live sources. The UI has Simple and Advanced
 configuration, prompt drafting, a preview-before-run step, and optional local
 documents. This is an MVP, not a validated production service: broader quality
-evaluation, failure handling, and resume remain open. See [TASKS.md](TASKS.md).
+evaluation remains open. Failure handling and opt-in CLI checkpoints/resume are
+implemented; see [checkpoint behavior](docs/checkpoints.md) and [TASKS.md](TASKS.md).
 
 ## Repository layout
 
 - `src/models/` — validated request, source, candidate, evaluation, and proposal contracts.
 - `src/workers/`, `src/orchestration/`, `src/prompts/` — research workers, coordinator,
   and versioned model prompts.
-- `src/application.py`, `src/preflight.py`, `src/cli.py` — reviewed run assembly,
-  validation, and command-line entry point.
-- `src/ui/`, `streamlit_app.py` — Streamlit modules and thin launch file.
+- `src/application.py`, `src/preflight.py` — reviewed run assembly and validation.
+- `src/ui/` — CLI (`cli.py`) and Streamlit modules; `streamlit_app.py` is the
+  thin Streamlit launch file.
+- `src/guardrails/` — input-size advisories and privacy checks shared by both interfaces.
 - `src/adapters/`, `src/retrieval/` — frozen-fixture, Tavily, GitHub, and optional
   upload adapters plus a run-scoped local hybrid index.
 - `config/` — source registry, search and retrieval limits, and scoring weights.
@@ -46,7 +54,7 @@ Neither command makes model or provider API calls.
 For a no-key, no-network CLI smoke check, use:
 
 ```sh
-python -m src.cli --case evals/cases/development/ai_engineering_capstone_01.json --offline-demo
+python -m src.ui.cli --case evals/cases/development/ai_engineering_capstone_01.json --offline-demo
 ```
 
 The case asks for more candidates than the deterministic demo model creates,
@@ -85,7 +93,7 @@ Install `requirements.txt`, set `OPENAI_API_KEY`, and choose a model available t
 your account. From the repository root:
 
 ```sh
-python -m src.cli --case evals/cases/development/ai_engineering_capstone_01.json --model YOUR_MODEL_ID
+python -m src.ui.cli --case evals/cases/development/ai_engineering_capstone_01.json --model YOUR_MODEL_ID
 ```
 
 This uses only synthetic source records, but it **does make OpenAI model calls**
@@ -94,12 +102,14 @@ to compare orchestration. For your own structured `InputRequest` JSON, use
 `--request request.json --fixture-set ai_engineering_capstone_01` instead of
 `--case`. Output is a JSON `OrchestrationResult` with candidates, evaluations,
 ranking, complete final proposals where supported, and explicit coverage status.
+`partial` means fewer proposals were available than requested; users still receive
+those proposals. Synthetic exploration stays internal and is excluded from results.
 The shared `run_research()` function in `src/application.py` remains available.
 The [official OpenAI quickstart](https://developers.openai.com/api/docs/quickstart)
 explains API-key setup.
 
 For all supported settings, use
-`python -m src.cli --config scoutspark-config.json --fixture-set ai_engineering_capstone_01 --model YOUR_MODEL_ID`.
+`python -m src.ui.cli --config scoutspark-config.json --fixture-set ai_engineering_capstone_01 --model YOUR_MODEL_ID`.
 Use `--live` instead of `--fixture-set` for ready live adapters. To review a
 natural-language request at the CLI, first use `--prompt-file request.txt` and
 save its JSON draft, then run with `--draft-file draft.json --review-file review.json`.
@@ -121,6 +131,12 @@ types, [`config/search_defaults.json`](config/search_defaults.json) for search
 limits, [`config/retrieval.json`](config/retrieval.json) for index limits, and
 [`config/rubric.json`](config/rubric.json) for scoring criteria and presets.
 Criterion weights must total 100; hard gates still apply when a weight is zero.
+
+The results UI shows failed candidates with their caveats. If only evidence
+sufficiency fails, users can explicitly keep an idea despite that uncertainty;
+the decision is included in the downloaded run JSON without changing the failed
+assessment or generating a proposal. Known deadline conflicts remain blocking,
+while uncertain timing is shown as a caveat. See [candidate scoring and review](docs/candidate_scoring.md).
 
 Frozen fixtures are synthetic and require no credentials. Tavily web search
 requires `TAVILY_API_KEY`; GitHub public repository search can use an optional

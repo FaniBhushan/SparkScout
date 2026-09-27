@@ -52,6 +52,36 @@ class Generator:
 
 
 class SourcePolicyRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repeated_queries_deduplicate_but_changed_content_is_rejected(self):
+        class RepeatedPlanner(Planner):
+            async def plan(self, request, search):
+                first = (await super().plan(request, search))[0]
+                return [first, first.model_copy(update={"query_id": "query-2"})]
+
+        class ChangingAdapter(Adapter):
+            async def search(self, query):
+                records = await super().search(query)
+                if query.query_id == "query-2":
+                    records[0].abstract_or_snippet = "Different source content"
+                return records
+
+        search = ResolvedSearchConfiguration(
+            domain="AI engineering", providers=[{"provider_id": "fixture",
+                "source_types": ["web_article"], "content_types": ["metadata"]}],
+            content_types=["metadata"], max_queries=2, max_results_per_query=3, max_sources=6,
+        )
+        request = InputRequest(domain="AI engineering", time_limit_days=30)
+        for worker, query_type in ((ScoutWorker, ScoutQuery), (LibraryWorker, SourceQuery)):
+            def build(adapter):
+                args = [{"fixture": adapter}, RepeatedPlanner(query_type)]
+                if worker is ScoutWorker:
+                    args.append(Generator())
+                return worker(*args)
+            result = await build(Adapter()).run(request, search)
+            self.assertEqual(len(result.sources), 3)
+            with self.assertRaisesRegex(ValueError, "conflicting records"):
+                await build(ChangingAdapter()).run(request, search)
+
     async def test_both_workers_apply_type_and_age_caps(self):
         request = InputRequest(domain="AI engineering", time_limit_days=30)
         search = ResolvedSearchConfiguration(

@@ -5,15 +5,16 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping
 from contextlib import nullcontext
-from hashlib import sha256
 from typing import Protocol
 
 from src.adapters.base import SourceAdapter
 from src.models import InputRequest, LibraryResult, ResolvedSearchConfiguration, SourceQuery
-from src.models.source_record import RetrievalStatus, SourceChunk, SourceRecord
+from src.models.source_record import SourceRecord
 from src.observability import RunTracer
-from src.workers.source_filter import source_is_within_age_limit
+from src.workers.source_filter import same_source_content, source_is_within_age_limit
+from src.workers.query_limits import bound_query_plan
 from src.workers.upload_query import include_upload_query
+from src.workers.evidence import build_source_chunks
 
 
 class LibraryQueryPlanner(Protocol):
@@ -48,8 +49,11 @@ class LibraryWorker:
             raise ValueError("request and resolved search domains must match")
 
         queries = include_upload_query(await self.query_planner.plan(request, search), search, SourceQuery)
+        queries, warnings = bound_query_plan(queries, search)
         self._validate_queries(queries, search)
         if self.tracer:
+            if warnings:
+                self.tracer.event("library", "query_plan_adjusted", count=len(warnings))
             self.tracer.budget("library", "search_queries", len(queries), search.max_queries)
 
         sources: list[SourceRecord] = []
@@ -98,27 +102,13 @@ class LibraryWorker:
                     sources.append(source)
                     seen[source.source_id] = source
                     type_counts[source.source_type] += 1
-                elif previous != source:
+                elif not same_source_content(previous, source):
                     raise ValueError(f"conflicting records have source ID {source.source_id!r}")
             if self.tracer:
                 self.tracer.budget("library", "source_records", len(sources), search.max_sources)
 
-        chunks = [
-            SourceChunk(
-                chunk_id=f"{source.source_id}-c0",
-                source_id=source.source_id,
-                ordinal=0,
-                text=source.full_text or source.abstract_or_snippet,
-                content_hash=sha256((source.full_text or source.abstract_or_snippet).encode("utf-8")).hexdigest(),
-                token_count=max(1, len(source.full_text or source.abstract_or_snippet) // 4),
-                start_offset=0,
-                end_offset=len(source.full_text or source.abstract_or_snippet),
-            )
-            for source in sources
-            if source.retrieval_status in (RetrievalStatus.SUCCESS, RetrievalStatus.PARTIAL)
-            and (source.full_text or source.abstract_or_snippet)
-        ]
-        warnings = []
+        chunks = build_source_chunks(sources)
+        warnings = list(warnings)
         if not chunks:
             warnings.append("No usable source snippets were found for candidate evaluation.")
         if self.tracer:
@@ -128,8 +118,6 @@ class LibraryWorker:
     def _validate_queries(
         self, queries: list[SourceQuery], search: ResolvedSearchConfiguration
     ) -> None:
-        if len(queries) > search.max_queries:
-            raise ValueError("query planner exceeded max_queries")
         if len({query.query_id for query in queries}) != len(queries):
             raise ValueError("query IDs must be unique")
         allowed = {provider.provider_id: provider for provider in search.providers}
@@ -144,5 +132,3 @@ class LibraryWorker:
                     f"query {query.query_id!r} requests an unavailable content type "
                     f"from provider {query.provider_id!r}"
                 )
-            if query.max_results > search.max_results_per_query:
-                raise ValueError(f"query {query.query_id!r} exceeds max_results_per_query")

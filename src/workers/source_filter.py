@@ -7,6 +7,19 @@ from datetime import datetime
 from src.models import ResolvedSearchConfiguration, SourceRecord
 
 
+def same_source_content(left: SourceRecord, right: SourceRecord) -> bool:
+    """Repeated queries change receipt metadata, not the source's identity.
+
+    Keep the first receipt while still rejecting changes to content or other
+    source metadata. Compare full text and passages explicitly because
+    serialization omits them.
+    """
+    excluded = {"query_id", "captured_at"}
+    return (left.model_dump(exclude=excluded) == right.model_dump(exclude=excluded)
+            and left.full_text == right.full_text
+            and left.evidence_chunks == right.evidence_chunks)
+
+
 def source_is_within_age_limit(
     source: SourceRecord, search: ResolvedSearchConfiguration
 ) -> bool:

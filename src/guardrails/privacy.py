@@ -1,4 +1,4 @@
-"""Small deterministic checks; no model calls and no matched values in messages.
+"""Deterministic privacy checks; no matched values in diagnostic messages.
 
 These patterns catch obvious credentials and contact details, not all sensitive
 data. A clean scan is not proof that content is safe to share.
@@ -7,19 +7,11 @@ data. A clean scan is not proof that content is safe to share.
 from __future__ import annotations
 
 import re
-import warnings
 from collections.abc import Iterator, Mapping
 
 from pydantic import BaseModel, ValidationError
 
 
-LONG_PROMPT_CHARS = 4000
-LARGE_REQUEST_CHARS = 12000
-LONG_INPUT_WARNING = (
-    "Large input: sending more text can increase model cost and delay. "
-    "You can continue without shortening it; configured budgets and provider "
-    "context limits still apply."
-)
 CONTACT_WARNING = (
     "Possible personal contact information detected. Review it before sending "
     "or sharing this content; detection is incomplete."
@@ -41,10 +33,6 @@ _CREDENTIAL_FIELD = re.compile(r"(?:api[_ -]?key|access[_ -]?token|password|secr
 
 class SensitiveContentError(ValueError):
     """Content is blocked without including the detected credential."""
-
-
-class GuardrailWarning(UserWarning):
-    """Non-blocking size or privacy advisory for non-UI callers."""
 
 
 def _strings(value: object) -> Iterator[str]:
@@ -77,23 +65,6 @@ def check_privacy(value: object) -> list[str]:
             )
         contact_found = contact_found or bool(_CONTACT.search(text))
     return [CONTACT_WARNING] if contact_found else []
-
-
-def input_advisories(value: object) -> list[str]:
-    """Long natural-language input is advisory, never truncated or size-blocked."""
-
-    messages = check_privacy(value)
-    texts = list(_strings(value))
-    if any(len(text) > LONG_PROMPT_CHARS for text in texts) or sum(map(len, texts)) > LARGE_REQUEST_CHARS:
-        messages.insert(0, LONG_INPUT_WARNING)
-    return messages
-
-
-def emit_advisories(messages: list[str]) -> None:
-    """Python/CLI callers receive warnings on stderr, leaving JSON stdout clean."""
-
-    for message in dict.fromkeys(messages):
-        warnings.warn(message, GuardrailWarning, stacklevel=2)
 
 
 def safe_error_message(error: Exception) -> str:

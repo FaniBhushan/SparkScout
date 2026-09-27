@@ -3,15 +3,16 @@
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, redirect_stderr
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from evals.claim_support import (
     Prediction, assessment_label, collect_predictions, load_cases, main, score_predictions,
 )
 from src.models import CandidateAssessment
+from src.budgets import BudgetExceeded
 
 
 def assessment(case, label):
@@ -49,6 +50,13 @@ class ClaimSupportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({case.expected for case in dataset.cases},
                          {"supported", "unsupported", "contradictory"})
         self.assertTrue(any("Ignore" in case.evidence for case in dataset.cases))
+
+    def test_held_out_dataset_uses_distinct_missing_and_contradictory_examples(self):
+        held_out = load_cases(Path(__file__).parents[1] / "evals" / "guardrails" / "claim_support_held_out.json")
+        development_ids = {case.id for case in load_cases().cases}
+        self.assertEqual(len(held_out.cases), 6)
+        self.assertTrue({case.id for case in held_out.cases}.isdisjoint(development_ids))
+        self.assertEqual({case.expected for case in held_out.cases}, {"unsupported", "contradictory"})
 
     def test_metrics_penalize_false_support_and_invalid_outputs(self):
         dataset = load_cases()
@@ -89,6 +97,27 @@ class ClaimSupportTests(unittest.IsolatedAsyncioTestCase):
         predictions = await collect_predictions(dataset, FakeJudge())
         self.assertEqual(len(calls), 9)
         self.assertAlmostEqual(score_predictions(dataset, predictions)["accuracy"], 1 / 3)
+
+
+class PaidEvaluationBudgetTests(unittest.TestCase):
+    def test_paid_run_requires_valid_explicit_budget_and_rates(self):
+        for options in ([], ["--max-cost-usd", "nan", "--input-rate", "0.15", "--output-rate", "0.6"]):
+            with patch("sys.argv", ["eval", "--model", "gpt-4o-mini", *options]), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit):
+                    main()
+
+    def test_insufficient_budget_blocks_first_model_call_and_closes_client(self):
+        argv = ["eval", "--model", "gpt-4o-mini", "--max-cost-usd", "0.00000001",
+                "--input-rate", "0.15", "--output-rate", "0.6"]
+        with (patch("sys.argv", argv), patch("src.environment.load_local_environment"),
+              patch("src.llm.client.OpenAITextClient") as factory):
+            factory.return_value.complete = AsyncMock()
+            factory.return_value.sdk_client.close = AsyncMock()
+            with self.assertRaises(BudgetExceeded):
+                main()
+            factory.return_value.complete.assert_not_awaited()
+            factory.return_value.sdk_client.close.assert_awaited_once()
+            self.assertEqual(factory.call_args.kwargs["max_retries"], 0)
 
 
 if __name__ == "__main__":

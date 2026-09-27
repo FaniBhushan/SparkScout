@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+from math import isfinite
 from pathlib import Path
 from typing import Literal
 
@@ -33,7 +34,7 @@ class ClaimCase(ContractModel):
 
 
 class ClaimDataset(ContractModel):
-    version: Literal["1.0"]
+    version: str = Field(pattern=r"^\d+\.\d+$")
     synthetic: Literal[True]
     cases: list[ClaimCase] = Field(min_length=1)
 
@@ -43,8 +44,8 @@ class Prediction(ContractModel):
     label: Literal["supported", "unsupported", "contradictory", "invalid"]
 
 
-def load_cases() -> ClaimDataset:
-    dataset = ClaimDataset.model_validate_json(DATASET.read_text(encoding="utf-8"))
+def load_cases(path: Path = DATASET) -> ClaimDataset:
+    dataset = ClaimDataset.model_validate_json(path.read_text(encoding="utf-8"))
     if len({case.id for case in dataset.cases}) != len(dataset.cases):
         raise ValueError("claim-support case IDs must be unique")
     return dataset
@@ -133,23 +134,56 @@ def main() -> int:
     action.add_argument("--validate-only", action="store_true")
     action.add_argument("--predictions", type=Path, help="offline JSON list of {id, label}")
     action.add_argument("--model", help="explicitly enable paid Critic calls for all cases")
+    parser.add_argument("--dataset", type=Path, default=DATASET, help="frozen claim-support dataset")
+    parser.add_argument("--max-cost-usd", type=float, help="required per-invocation estimated spending cap")
+    parser.add_argument("--input-rate", type=float, help="USD per million input tokens")
+    parser.add_argument("--output-rate", type=float, help="USD per million output tokens")
     args = parser.parse_args()
-    dataset = load_cases()
+    if args.model and any(
+        value is None or not isfinite(value) or value <= 0
+        for value in (args.max_cost_usd, args.input_rate, args.output_rate)
+    ):
+        parser.error("paid evaluation requires positive finite --max-cost-usd, --input-rate and --output-rate")
+    dataset = load_cases(args.dataset)
+    budget = None
     if args.validate_only:
         print(f"Validated {len(dataset.cases)} synthetic claim-support cases; no model calls.")
         return 0
     if args.predictions:
         predictions = TypeAdapter(list[Prediction]).validate_json(args.predictions.read_text())
     else:
-        from src.llm.client import OpenAITextClient
+        from src.budgets import BudgetedLLMClient, RunBudget
+        from src.environment import load_local_environment
+        from src.llm.client import ModelPricing, OpenAITextClient
         from src.llm.critic_llm import LLMCandidateJudge
+        from src.models import RunBudgetLimits
 
-        judge = LLMCandidateJudge(OpenAITextClient(args.model), max_output_tokens=1000)
-        predictions = asyncio.run(collect_predictions(dataset, judge))
+        load_local_environment()
+        pricing = ModelPricing(args.input_rate, args.output_rate)
+        budget = RunBudget(RunBudgetLimits(
+            max_elapsed_seconds=300, max_model_tokens=100000,
+            max_estimated_cost_usd=args.max_cost_usd,
+        ), pricing=pricing)
+        # Hidden SDK retries would bypass per-attempt reservations. Fail closed
+        # on transport failures instead; no automatic paid reruns.
+        client = OpenAITextClient(args.model, pricing=pricing, max_retries=0)
+        judge = LLMCandidateJudge(BudgetedLLMClient(client, budget), max_output_tokens=1000)
+
+        async def evaluate():
+            try:
+                return await asyncio.wait_for(collect_predictions(dataset, judge), timeout=300)
+            finally:
+                await client.sdk_client.close()
+
+        predictions = asyncio.run(evaluate())
     print(json.dumps({
         "dataset_version": dataset.version,
-        "dataset_sha256": hashlib.sha256(DATASET.read_bytes()).hexdigest(),
+        "dataset_sha256": hashlib.sha256(args.dataset.read_bytes()).hexdigest(),
+        "dataset_path": str(args.dataset),
         "model": args.model,
+        "budget_usage": budget.snapshot() if budget else None,
+        "max_cost_usd": args.max_cost_usd,
+        "pricing_per_million": {"input": args.input_rate, "output": args.output_rate},
         "predictions": [item.model_dump() for item in predictions],
         "metrics": score_predictions(dataset, predictions),
     }, indent=2))

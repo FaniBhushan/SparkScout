@@ -36,5 +36,24 @@
     "retrieval_status": "success",
     "provider_record_id": "fixture-math-repo-001",
     "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "math-paper-002",
+    "provider": "fixture",
+    "source_type": "scholarly_article",
+    "title": "Practical evaluation of open optimization solvers",
+    "authors_or_owners": ["Synthetic Optimization Lab"],
+    "published_at": "2025-08-14",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/math-paper-002",
+    "query_id": "math-query-003",
+    "domain_tags": ["mathematics", "optimization", "open source"],
+    "abstract_or_snippet": "A synthetic study outline comparing open solver runtimes and solution quality on public benchmark instances.",
+    "license_access_note": "Synthetic fixture for tests; not real-world evidence.",
+    "content_hash": "sha256:math-paper-002",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-math-paper-002",
+    "metadata_conflicts": {}
   }
 ]

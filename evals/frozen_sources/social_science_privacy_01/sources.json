@@ -36,5 +36,24 @@
     "retrieval_status": "success",
     "provider_record_id": "fixture-soc-doc-001",
     "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "soc-paper-002",
+    "provider": "fixture",
+    "source_type": "scholarly_article",
+    "title": "Aggregated methods for transit satisfaction studies",
+    "authors_or_owners": ["Synthetic Social Research Group"],
+    "published_at": "2025-05-20",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/soc-paper-002",
+    "query_id": "soc-query-003",
+    "domain_tags": ["social science", "transport", "privacy"],
+    "abstract_or_snippet": "A synthetic methods note describing aggregate reporting and coarse time bands for public-transport experience research.",
+    "license_access_note": "Synthetic fixture for tests; not real-world evidence.",
+    "content_hash": "sha256:soc-paper-002",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-soc-paper-002",
+    "metadata_conflicts": {}
   }
 ]

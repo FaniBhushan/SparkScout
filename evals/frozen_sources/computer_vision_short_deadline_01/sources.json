@@ -36,5 +36,24 @@
     "retrieval_status": "success",
     "provider_record_id": "fixture-cv-repo-001",
     "metadata_conflicts": {}
+  },
+  {
+    "schema_version": "1.0",
+    "source_id": "cv-data-002",
+    "provider": "fixture",
+    "source_type": "official_dataset",
+    "title": "Tiny labeled texture benchmark",
+    "authors_or_owners": ["Synthetic Vision Institute"],
+    "published_at": "2025-09-03",
+    "captured_at": "2026-09-23T10:00:00Z",
+    "canonical_url": "https://example.com/fixtures/cv-data-002",
+    "query_id": "cv-query-003",
+    "domain_tags": ["computer vision", "dataset", "CPU"],
+    "abstract_or_snippet": "A synthetic compact benchmark with a small labeled sample suitable for feature-based CPU experiments within a short course project.",
+    "license_access_note": "Synthetic fixture representing an openly licensed dataset.",
+    "content_hash": "sha256:cv-data-002",
+    "retrieval_status": "success",
+    "provider_record_id": "fixture-cv-data-002",
+    "metadata_conflicts": {}
   }
 ]

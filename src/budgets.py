@@ -14,6 +14,8 @@ from src.models import RunBudgetLimits
 from src.models.scout_query import SourceQuery
 from src.models.source_record import SourceRecord
 from src.observability import RunTracer
+from src.failures import RetryableFailure
+from src.retry import wait_before_retry
 
 
 class BudgetExceeded(ModelResponseError):
@@ -43,6 +45,27 @@ class RunBudget:
         self._used_cost = 0.0
         self._reserved_cost = 0.0
         self._provider_calls: Counter[str] = Counter()
+        self.retry_limit = 0
+        self.checkpoint = None
+
+    def remaining_seconds(self) -> float:
+        return max(0, self.limits.max_elapsed_seconds - (monotonic() - self.started_at))
+
+    def restore(self, values: dict) -> None:
+        """Resume counts including unknown usage; offline time is not execution time."""
+        from src.models.run_budget import RunBudgetUsage
+        usage = RunBudgetUsage.model_validate(values)
+        self._used_tokens = usage.model_tokens
+        self._used_cost = usage.estimated_cost_usd or 0
+        self._reserved_tokens = usage.reserved_model_tokens
+        self._reserved_cost = usage.reserved_cost_usd
+        self._source_bytes = usage.source_bytes
+        self._provider_calls = Counter(usage.provider_calls)
+        self.started_at = monotonic() - usage.elapsed_seconds
+
+    def persist(self) -> None:
+        if self.checkpoint:
+            self.checkpoint.save_budget(self.snapshot())
 
     def check_time(self) -> None:
         if monotonic() - self.started_at >= self.limits.max_elapsed_seconds:
@@ -50,6 +73,9 @@ class RunBudget:
 
     async def reserve_model_call(self, prompt: str, max_output_tokens: int) -> tuple[int, float]:
         """Reserve a conservative text-input estimate plus all possible output."""
+
+        if type(max_output_tokens) is not int or max_output_tokens <= 0:
+            raise ValueError("max_output_tokens must be a positive integer")
 
         # Every UTF-8 byte is counted as a potential token, with small framing
         # headroom. Reported API usage replaces this estimate after the call.
@@ -65,6 +91,7 @@ class RunBudget:
                 raise BudgetExceeded("run estimated cost budget would be exceeded")
             self._reserved_tokens += reserved_tokens
             self._reserved_cost += reserved_cost
+            self.persist()
         return reserved_tokens, reserved_cost
 
     async def settle_model_call(
@@ -72,19 +99,32 @@ class RunBudget:
         reply: ModelReply | None,
         reservation: tuple[int, float],
     ) -> ModelReply | None:
-        """Count reported usage even for incomplete responses, then release reserve."""
+        """Settle known usage; retain allowance when provider usage is unknown.
+
+        A transport failure or cancellation does not prove the provider did no
+        billable work. Keep its conservative reservation unavailable to siblings.
+        """
 
         async with self._lock:
-            self._reserved_tokens -= reservation[0]
-            self._reserved_cost -= reservation[1]
             if reply is None:
                 return None
             if reply.input_tokens is None or reply.output_tokens is None:
                 raise BudgetExceeded("model token usage was not reported", reply=reply)
+            if any(type(value) is not int or value < 0 for value in (
+                reply.input_tokens, reply.output_tokens
+            )):
+                raise BudgetExceeded("model token usage was invalid", reply=reply)
+            self._reserved_tokens -= reservation[0]
+            self._reserved_cost = max(0.0, self._reserved_cost - reservation[1])
+            if self._reserved_tokens == 0:
+                # Parallel settlements can leave a sub-cent floating-point
+                # remainder. No pending tokens means no pending cost either.
+                self._reserved_cost = 0.0
             tokens = reply.input_tokens + reply.output_tokens
             self._used_tokens += tokens
             cost = self._cost(reply.input_tokens, reply.output_tokens)
             self._used_cost += cost
+            self.persist()
             if self.tracer:
                 self.tracer.budget("run", "model_tokens", self._used_tokens, self.limits.max_model_tokens)
                 if self.limits.max_estimated_cost_usd is not None:
@@ -111,6 +151,7 @@ class RunBudget:
             if self._provider_calls[provider_id] >= limit:
                 raise BudgetExceeded(f"provider {provider_id!r} call budget exhausted")
             self._provider_calls[provider_id] += 1
+            self.persist()
             if self.tracer:
                 self.tracer.budget("run", f"provider_calls:{provider_id}", self._provider_calls[provider_id], limit)
 
@@ -120,6 +161,7 @@ class RunBudget:
         async with self._lock:
             self.check_time()
             self._source_bytes += byte_count
+            self.persist()
             if self.tracer:
                 self.tracer.budget(
                     "run", "source_bytes", self._source_bytes, self.limits.max_source_bytes
@@ -136,6 +178,8 @@ class RunBudget:
             "estimated_cost_usd": self._used_cost if self.pricing else None,
             "provider_calls": dict(self._provider_calls),
             "elapsed_seconds": round(monotonic() - self.started_at, 3),
+            "reserved_model_tokens": self._reserved_tokens,
+            "reserved_cost_usd": self._reserved_cost,
         }
 
     def _cost(self, input_tokens: int, output_tokens: int) -> float:
@@ -155,9 +199,25 @@ class BudgetedLLMClient:
         self.budget = budget
 
     async def complete(self, prompt: str, *, max_output_tokens: int) -> ModelReply:
+        for attempt in range(self.budget.retry_limit + 1):
+            try:
+                return await self._attempt(prompt, max_output_tokens=max_output_tokens)
+            except RetryableFailure as error:
+                if attempt >= self.budget.retry_limit:
+                    raise
+                if self.budget.tracer:
+                    self.budget.tracer.event("model", "retry", count=attempt + 1)
+                await wait_before_retry(error, self.budget)
+
+    async def _attempt(self, prompt: str, *, max_output_tokens: int) -> ModelReply:
         reservation = await self.budget.reserve_model_call(prompt, max_output_tokens)
         try:
-            reply = await self.client.complete(prompt, max_output_tokens=max_output_tokens)
+            reply = await asyncio.wait_for(
+                self.client.complete(prompt, max_output_tokens=max_output_tokens),
+                timeout=self.budget.remaining_seconds(),
+            )
+        except asyncio.TimeoutError:
+            raise BudgetExceeded("run time budget exhausted") from None
         except ModelResponseError as error:
             error.reply = await self.budget.settle_model_call(error.reply, reservation)
             raise
@@ -178,12 +238,27 @@ class BudgetedSourceAdapter:
         self.budget = budget
 
     async def search(self, query: SourceQuery) -> list[SourceRecord]:
+        for attempt in range(self.budget.retry_limit + 1):
+            try:
+                return await self._attempt(query)
+            except RetryableFailure as error:
+                if attempt >= self.budget.retry_limit:
+                    raise
+                if self.budget.tracer:
+                    self.budget.tracer.event("provider", "retry", provider_id=self.provider_id, count=attempt + 1)
+                await wait_before_retry(error, self.budget)
+
+    async def _attempt(self, query: SourceQuery) -> list[SourceRecord]:
         emit_advisories(check_privacy(query))
         await self.budget.reserve_provider_call(self.provider_id)
-        records = await self.adapter.search(query)
+        try:
+            records = await asyncio.wait_for(self.adapter.search(query), timeout=self.budget.remaining_seconds())
+        except asyncio.TimeoutError:
+            raise BudgetExceeded("run time budget exhausted") from None
         await self.budget.account_source_bytes(sum(
             len(record.model_dump_json().encode("utf-8"))
             + len((record.full_text or "").encode("utf-8"))
+            + sum(len(chunk.model_dump_json().encode("utf-8")) for chunk in record.evidence_chunks)
             for record in records
         ))
         return records
