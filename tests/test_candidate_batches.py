@@ -4,7 +4,7 @@ import json
 import unittest
 from datetime import datetime, timezone
 
-from src.budgets import BudgetExceeded
+from src.runtime.budgets import BudgetExceeded
 from src.llm.client import ModelReply, ModelResponseError, ModelTransportError
 from src.llm.scout_llm import LLMCandidateGenerator
 from src.models import InputRequest, SourceRecord

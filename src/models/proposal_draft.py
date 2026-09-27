@@ -11,6 +11,8 @@ from .final_proposal import AlternativeApproach, ProposalEvaluationPlan
 class ProposalDraft(ContractModel):
     """LLM-authored fields later combined with code-owned identity and scores."""
 
+    problem_statement: NonEmptyText | None = None
+    why_it_matters: NonEmptyText | None = None
     gap_or_differentiation: NonEmptyText
     scoped_mvp: list[NonEmptyText] = Field(min_length=1)
     non_goals: list[NonEmptyText] = Field(min_length=1)

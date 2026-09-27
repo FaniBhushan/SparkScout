@@ -10,12 +10,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.adapters import FrozenFixtureAdapter
-from src.application import LLMOutputLimits, run_prepared_research, run_research
+from src.application.service import LLMOutputLimits, run_prepared_research, run_research
 from src.ui.cli import main
 from src.llm.client import ModelReply
 from src.models import BudgetSelection, InputRequest, SubmittedRunConfiguration
-from src.budgets import BudgetExceeded
-from src.preflight import prepare_run
+from src.runtime.budgets import BudgetExceeded
+from src.application.preflight import prepare_run
 from src.models import OrchestrationResult
 from pydantic import ValidationError
 
@@ -103,6 +103,15 @@ class FakeLLMClient:
                     "references": [reference],
                 }],
             }
+        elif "independently verify factual support" in prompt:
+            data = prompt_json(prompt, "Checks:\n")
+            passages = {item["chunk_id"]: item["text"] for item in data["passages"]}
+            payload = {"checks": [
+                {"check_id": item["check_id"],
+                 "label": "proposed" if item["kind"] == "proposal_statement" else "supported",
+                 "rationale": "Test verdict.",
+                 "evidence_quotes": [passages[item["passage_ids"][0]]]}
+                for item in data["checks"]]}
         else:
             raise AssertionError("unexpected model prompt")
         return ModelReply(
@@ -147,8 +156,8 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.final_proposals[0].total_score,
                          result.critic.evaluations[0].total_score)
         self.assertEqual({source.provider for source in result.source_manifest}, {"frozen_fixture"})
-        self.assertEqual(client.calls, [1000, 3000, 1000, 3000, 4000])
-        self.assertEqual(result.budget_usage.model_tokens, 3000)
+        self.assertEqual(client.calls, [1000, 3000, 1000, 3000, 4000, 2000])
+        self.assertEqual(result.budget_usage.model_tokens, 3600)
         self.assertEqual(result.budget_usage.provider_calls, {"frozen_fixture": 2})
 
     async def test_prepared_run_uses_reviewed_configuration_without_resolving_again(self):
@@ -157,7 +166,7 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         )
         client = FakeLLMClient()
 
-        with patch("src.application.prepare_run", side_effect=AssertionError("re-resolved")):
+        with patch("src.application.service.prepare_run", side_effect=AssertionError("re-resolved")):
             result = await run_prepared_research(prepared, client, self.adapters)
 
         self.assertEqual(result.status, "completed")
@@ -252,8 +261,12 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
                     )
                 return reply
 
-        with self.assertRaisesRegex(ValueError, "outside its supplied evidence"):
-            await run_research(self.request, BadCitationClient(), self.adapters)
+        client = BadCitationClient()
+        result = await run_research(self.request, client, self.adapters)
+        self.assertEqual(result.status, "insufficient_coverage")
+        self.assertEqual(result.final_proposals, [])
+        self.assertIn("candidate-01", result.proposal_failures)
+        self.assertEqual(client.calls.count(4000), 2)
 
     async def test_final_proposal_reports_coverage_when_scoring_cites_no_chunks(self):
         class UncitedJudgeClient(FakeLLMClient):

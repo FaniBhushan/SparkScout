@@ -21,6 +21,8 @@ from src.models.common import EvidenceReference
 from src.models.evaluation_result import CriterionScore, EvaluationResult, HardGateResult
 from src.observability import RunTracer
 from src.retrieval import Retriever
+from src.workers.critic_evidence import retrieve_candidate_evidence
+from src.runtime.budgets import StageAllowanceExceeded
 
 
 class CandidateJudge(Protocol):
@@ -36,6 +38,12 @@ class CandidateJudge(Protocol):
 
 
 class CriticWorker:
+    """Retrieve candidate-specific passages and validate rubric judgments.
+
+    Candidates are independent: malformed judgments are reported and skipped so
+    one bad response does not discard other completed assessments.
+    """
+
     def __init__(
         self,
         retriever: Retriever,
@@ -65,7 +73,7 @@ class CriticWorker:
                 return CriticResult(warnings=["No source chunks available for evaluation."])
             evaluations = []
             warnings = []
-            for candidate in candidates:
+            for candidate_index, candidate in enumerate(candidates):
                 with (
                     self.tracer.span("candidate_evaluation", task_id=candidate.candidate_id)
                     if self.tracer
@@ -80,6 +88,14 @@ class CriticWorker:
                         continue
                     try:
                         assessment = await self.judge.assess(request, candidate, evidence, rubric)
+                    except StageAllowanceExceeded:
+                        # Finalization has a separate reserved allowance, so stop
+                        # scoring here and let the coordinator use it for proposals.
+                        warnings.append("Critic stopped at its stage allowance; retained completed assessments for finalization.")
+                        warnings.extend(
+                            f"Candidate {pending.candidate_id} was not scored because the research stage allowance was reached."
+                            for pending in candidates[candidate_index:])
+                        break
                     except ValidationError:
                         warnings.append(
                             f"Candidate {candidate.candidate_id} was not scored because its Critic response failed schema validation."
@@ -155,30 +171,9 @@ class CriticWorker:
         library: LibraryResult,
         rubric: EvaluationConfiguration,
     ) -> list[RetrievedChunk]:
-        allowed = {chunk.chunk_id: chunk for chunk in library.chunks}
-        hits: dict[str, RetrievedChunk] = {}
-        for definition in rubric.criteria.values():
-            query = f"{candidate.title} {candidate.problem_statement} {definition.retrieval_focus}"
-            results = await self.retriever.search(query, rubric.retrieval_top_k)
-            if len(results) > rubric.retrieval_top_k:
-                raise ValueError("retriever exceeded retrieval_top_k")
-            for hit in results:
-                if allowed.get(hit.chunk.chunk_id) != hit.chunk:
-                    raise ValueError("retriever returned a chunk outside the Library result")
-                old = hits.get(hit.chunk.chunk_id)
-                if old is None or hit.score > old.score:
-                    hits[hit.chunk.chunk_id] = hit
-
-        selected = []
-        token_count = 0
-        for hit in sorted(hits.values(), key=lambda item: (-item.score, item.chunk.chunk_id)):
-            count = max(hit.chunk.token_count or 0, max(1, len(hit.chunk.text) // 4))
-            if len(selected) >= rubric.max_context_chunks:
-                break
-            if token_count + count > rubric.max_context_tokens:
-                continue
-            selected.append(hit)
-            token_count += count
+        selected = await retrieve_candidate_evidence(self.retriever, candidate, library, rubric)
+        token_count = sum(max(hit.chunk.token_count or 0, max(1, len(hit.chunk.text) // 4))
+                          for hit in selected)
         if self.tracer:
             self.tracer.budget(
                 "critic", "context_chunks", len(selected), rubric.max_context_chunks,
@@ -197,6 +192,7 @@ class CriticWorker:
         evidence: list[RetrievedChunk],
         rubric: EvaluationConfiguration,
     ) -> EvaluationResult:
+        """Recompute scores from the rubric and reject unconfigured citations."""
         if set(assessment.criteria) != set(rubric.criteria):
             raise ValueError("judge must assess exactly the configured criteria")
         if set(assessment.hard_gates) != set(rubric.hard_gates):

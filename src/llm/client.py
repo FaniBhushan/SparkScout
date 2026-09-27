@@ -8,7 +8,7 @@ from typing import Protocol
 
 from openai import AsyncOpenAI, APITimeoutError, APIConnectionError, APIStatusError
 
-from src.failures import RetryableFailure
+from src.runtime.failures import RetryableFailure
 
 from src.prompts import TRUST_BOUNDARY_INSTRUCTIONS
 
@@ -62,14 +62,20 @@ class ModelTransportError(ModelResponseError, RetryableFailure):
 
 
 class ModelTimeoutError(ModelTransportError):
+    """Provider request exceeded its configured timeout."""
+
     code = "model_timeout"
 
 
 class ModelRateLimitError(ModelTransportError):
+    """Provider throttled the request; retry policy may honor Retry-After."""
+
     code = "model_rate_limit"
 
 
 class ModelRequestError(ModelResponseError):
+    """Provider rejected the request for a non-retryable request-level reason."""
+
     code = "model_request_rejected"
 
 
@@ -92,6 +98,7 @@ class OpenAITextClient:
         if max_retries != 0:
             raise ValueError("SDK retries must be disabled; use the run retry policy")
         self.model = model
+        self.resolved_models: set[str] = set()
         self.pricing = pricing
         self.sdk_client = (
             (sdk_client.with_options(max_retries=0) if isinstance(sdk_client, AsyncOpenAI) else sdk_client)
@@ -99,24 +106,43 @@ class OpenAITextClient:
             else AsyncOpenAI(timeout=timeout_seconds, max_retries=max_retries)
         )
 
+    def _input_payload(self, prompt: str) -> dict:
+        """Use identical text and instruction boundaries for counting and generation."""
+        instruction_options = {}
+        if prompt.startswith(TRUST_BOUNDARY_INSTRUCTIONS):
+            # Task instructions preceding the template's input marker are also
+            # code-owned. Never promote anything inside a serialized data block.
+            split = len(TRUST_BOUNDARY_INSTRUCTIONS)
+            marker = prompt.find("\n# Input\n", split)
+            first_data = prompt.find('<data name="')
+            if marker >= 0 and first_data > marker:
+                split = marker
+            instruction_options["instructions"] = prompt[:split]
+            prompt = prompt[split:]
+        return {"model": self.model, "input": prompt, **instruction_options}
+
+    async def count_input_tokens(self, prompt: str) -> int:
+        """Count the actual request framing when a conservative reservation will not fit."""
+        try:
+            response = await self.sdk_client.responses.input_tokens.count(**self._input_payload(prompt))
+        except (APIConnectionError, APIStatusError):
+            raise ModelResponseError("input token counting unavailable") from None
+        count = response.input_tokens
+        if type(count) is not int or count < 0:
+            raise ModelResponseError("input token count was invalid")
+        return count
+
     async def complete(
         self, prompt: str, *, max_output_tokens: int
     ) -> ModelReply:
+        """Make one request; retry and budget accounting belong to run services."""
         if not prompt.strip():
             raise ValueError("prompt must not be empty")
         if max_output_tokens <= 0:
             raise ValueError("max_output_tokens must be positive")
-
-        instruction_options = {}
-        if prompt.startswith(TRUST_BOUNDARY_INSTRUCTIONS):
-            # Promote only the code-owned prefix, never any user/source text.
-            # The budget already counted these bytes in the rendered prompt.
-            instruction_options["instructions"] = TRUST_BOUNDARY_INSTRUCTIONS
-            prompt = prompt[len(TRUST_BOUNDARY_INSTRUCTIONS):]
         try:
             response = await self.sdk_client.responses.create(
-                model=self.model, input=prompt, max_output_tokens=max_output_tokens,
-                store=False, **instruction_options,
+                **self._input_payload(prompt), max_output_tokens=max_output_tokens, store=False,
             )
         except APITimeoutError:
             raise ModelTimeoutError("model request timed out") from None
@@ -129,7 +155,7 @@ class OpenAITextClient:
                 failure = ModelTransportError("model service temporarily unavailable")
             else:
                 raise ModelRequestError("model request was rejected") from None
-            from src.retry import retry_after_seconds
+            from src.runtime.retry import retry_after_seconds
             failure.retry_after = retry_after_seconds(error.response.headers.get("retry-after"))
             raise failure from None
         usage = getattr(response, "usage", None)
@@ -146,6 +172,7 @@ class OpenAITextClient:
             output_tokens=usage.output_tokens if usage is not None else None,
             estimated_cost_usd=estimated_cost,
         )
+        self.resolved_models.add(reply.model)
         if response.status != "completed":
             raise ModelResponseError(
                 f"model response status was {response.status!r}", reply=reply

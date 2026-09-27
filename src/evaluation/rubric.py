@@ -47,4 +47,5 @@ def load_evaluation_configuration(
         retrieval_top_k=catalog["retrieval"]["top_k_per_criterion"],
         max_context_chunks=catalog["retrieval"]["max_context_chunks"],
         max_context_tokens=catalog["retrieval"]["max_context_tokens"],
+        allow_provisional_narrative=catalog.get("allow_provisional_narrative", False),
     )

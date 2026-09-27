@@ -7,9 +7,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from src.adapters.base import SourceAdapter
-from src.configuration import load_budget_policy, load_search_defaults, load_source_configuration
+from src.configuration.loader import load_budget_policy, load_search_defaults, load_source_configuration
 from src.evaluation.rubric import DEFAULT_RUBRIC_PATH
-from src.interpretation import confirm_interpretation
+from src.application.interpretation import confirm_interpretation
 from src.models import (
     InterpretationReview,
     PromptInterpretationDraft,

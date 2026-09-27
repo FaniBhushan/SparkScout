@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "request": {
+    "schema_version": "1.0",
+    "domain": "ai_engineering",
+    "time_limit_days": 30,
+    "interests": ["RAG evaluation", "reliable AI applications"],
+    "skill_level": "intermediate",
+    "team_size": 2,
+    "available_resources": ["laptop", "Python", "open-source software"],
+    "excluded_topics": ["training a large foundation model"],
+    "data_constraints": ["public data only", "avoid personally identifiable information"],
+    "desired_candidate_count": 6,
+    "finalist_count": 1,
+    "source_policy": {
+      "include_types": ["web_article", "code_repository"],
+      "required_types": ["web_article"]
+    }
+  },
+  "search": {
+    "mode": "advanced",
+    "preset": "balanced",
+    "provider_ids": ["tavily", "github"],
+    "limits": {
+      "max_queries": 4,
+      "max_results_per_query": 5,
+      "max_sources": 12
+    }
+  },
+  "evaluation": {
+    "rubric_preset": "balanced"
+  },
+  "budgets": {
+    "max_elapsed_seconds": 600,
+    "max_model_tokens": 200000,
+    "max_source_bytes": 1000000,
+    "max_pdf_pages": 10,
+    "max_estimated_cost_usd": 1.0
+  }
+}

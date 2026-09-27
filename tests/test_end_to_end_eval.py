@@ -10,15 +10,15 @@ from evals.end_to_end.cases import DEFAULT_CASES, load_cases
 from evals.end_to_end.checks import check_result
 from evals.end_to_end.reports import write_report
 from evals.end_to_end.runner import run_cases
-from src.budgets import BudgetExceeded
-from src.demo import OfflineDemoClient
+from src.runtime.budgets import BudgetExceeded
+from src.testing.demo import OfflineDemoClient
 from src.models import OrchestrationResult
 
 
 class EndToEndEvalTests(unittest.IsolatedAsyncioTestCase):
     async def test_demo_accepts_partial_count_and_exports_review(self):
         cases = load_cases([DEFAULT_CASES[0]])
-        records = await run_cases(cases, OfflineDemoClient())
+        records = await run_cases(cases, OfflineDemoClient(max_candidates=1))
         record = records[0]
         self.assertEqual(record["outcome"], "passed")
         self.assertTrue(record["checks"]["proposal_count"])
@@ -40,10 +40,12 @@ class EndToEndEvalTests(unittest.IsolatedAsyncioTestCase):
                 write_report(destination, report)
 
     async def test_failure_is_recorded_and_later_cases_are_skipped(self):
-        with patch("evals.end_to_end.runner.run_research", AsyncMock(side_effect=BudgetExceeded("cap"))) as run:
+        with patch("evals.end_to_end.runner.run_prepared_research", AsyncMock(side_effect=BudgetExceeded("cap"))) as run:
             records = await run_cases(load_cases(list(DEFAULT_CASES)), OfflineDemoClient())
         self.assertEqual([record["outcome"] for record in records], ["error", "skipped", "skipped"])
         self.assertEqual(run.await_count, 1)
+        self.assertEqual(sum(record["proposal_counts"]["requested"] for record in records), 9)
+        self.assertTrue(all(record["proposal_counts"]["returned"] == 0 for record in records))
 
     def test_rejects_unknown_duplicate_and_interpretation_cases(self):
         for ids in (["unknown"], [DEFAULT_CASES[0]] * 2, ["missing-time-limit-01"]):

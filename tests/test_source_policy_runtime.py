@@ -7,6 +7,7 @@ from unittest.mock import patch
 from src.adapters import build_available_adapters
 from src.models import InputRequest, ResolvedSearchConfiguration, ScoutQuery, SourceQuery, SourceRecord
 from src.models.source_record import RetrievalStatus
+from src.orchestration.coordinator import Orchestrator
 from src.workers.library_worker import LibraryWorker
 from src.workers.scout_worker import ScoutWorker
 
@@ -81,6 +82,57 @@ class SourcePolicyRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(result.sources), 3)
             with self.assertRaisesRegex(ValueError, "conflicting records"):
                 await build(ChangingAdapter()).run(request, search)
+
+    async def test_tavily_query_snippets_deduplicate_by_canonical_url(self):
+        class TavilyAdapter:
+            async def search(self, query):
+                snippet = f"Query-specific result excerpt for {query.query_id}."
+                return [SourceRecord(
+                    source_id="web-same-page", provider="tavily", source_type="web_article",
+                    title=f"Query-specific title {query.query_id}",
+                    canonical_url="https://example.org/research",
+                    query_id=query.query_id, abstract_or_snippet=snippet,
+                    content_hash=f"hash-{query.query_id}",
+                    captured_at=datetime(2026, 9, 27, tzinfo=timezone.utc),
+                    retrieval_status=RetrievalStatus.SUCCESS,
+                )]
+
+        class TavilyPlanner:
+            async def plan(self, request, search):
+                return [ScoutQuery(
+                    query_id=f"query-{number}", provider_id="tavily", text="research",
+                    source_types=["web_article"], content_types=["page_snippet"], max_results=1,
+                ) for number in (1, 2)]
+
+        class TavilyLibraryPlanner:
+            async def plan(self, request, search):
+                return [SourceQuery(
+                    query_id=f"query-{number}", provider_id="tavily", text="research",
+                    source_types=["web_article"], content_types=["page_snippet"], max_results=1,
+                ) for number in (1, 2)]
+
+        search = ResolvedSearchConfiguration(
+            domain="AI engineering", providers=[{"provider_id": "tavily",
+                "source_types": ["web_article"], "content_types": ["page_snippet"]}],
+            content_types=["page_snippet"], max_queries=2, max_results_per_query=1,
+            max_sources=3, minimum_source_count=1,
+        )
+        request = InputRequest(domain="AI engineering", time_limit_days=30)
+        scout = await ScoutWorker({"tavily": TavilyAdapter()}, TavilyPlanner(), Generator()).run(
+            request, search
+        )
+        library = await LibraryWorker({"tavily": TavilyAdapter()}, TavilyLibraryPlanner()).run(
+            request, search
+        )
+        self.assertEqual(len(scout.sources), 1)
+        self.assertEqual(len(library.sources), 1)
+        merged = Orchestrator._merge_sources(scout.sources, library.sources)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(len(merged[0].excerpts), 2)
+        self.assertEqual({chunk.text for chunk in library.chunks}, {
+            "Query-specific result excerpt for query-1.",
+            "Query-specific result excerpt for query-2.",
+        })
 
     async def test_both_workers_apply_type_and_age_caps(self):
         request = InputRequest(domain="AI engineering", time_limit_days=30)

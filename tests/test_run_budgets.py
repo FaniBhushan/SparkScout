@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from pydantic import ValidationError
 
-from src.budgets import BudgetExceeded, BudgetedLLMClient, BudgetedSourceAdapter, RunBudget
+from src.runtime.budgets import BudgetExceeded, BudgetedLLMClient, BudgetedSourceAdapter, RunBudget
 from src.llm.client import ModelPricing, ModelReply
 from src.models import (
     BudgetSelection,
@@ -16,7 +16,7 @@ from src.models import (
     SourceRecord,
     SubmittedRunConfiguration,
 )
-from src.preflight import prepare_run
+from src.application.preflight import prepare_run
 
 
 class ModelStub:
@@ -45,6 +45,47 @@ class SourceStub:
 
 
 class RunBudgetTests(unittest.IsolatedAsyncioTestCase):
+    async def test_research_headroom_is_available_to_finalization_only(self):
+        from src.runtime.budgets import StageAllowanceExceeded
+        budget = RunBudget(RunBudgetLimits(max_elapsed_seconds=30, max_model_tokens=1000))
+        research = BudgetedLLMClient(ModelStub(), budget, headroom_tokens=700)
+        with self.assertRaises(StageAllowanceExceeded):
+            await research.complete("short", max_output_tokens=400)
+        self.assertEqual(budget.snapshot()["reserved_model_tokens"], 0)
+        await BudgetedLLMClient(ModelStub(), budget).complete("short", max_output_tokens=400)
+        self.assertEqual(budget.snapshot()["model_tokens"], 30)
+
+    async def test_exact_count_rescues_byte_overestimate_without_lifting_limit(self):
+        class CountedModel(ModelStub):
+            async def count_input_tokens(self, prompt):
+                return 20
+
+        stub = CountedModel()
+        budget = RunBudget(RunBudgetLimits(max_elapsed_seconds=30, max_model_tokens=200))
+        client = BudgetedLLMClient(stub, budget)
+        await client.complete("many bytes " * 30, max_output_tokens=100)
+        self.assertEqual(stub.calls, 1)
+        self.assertEqual(budget.snapshot()["model_tokens"], 30)
+        with self.assertRaises(BudgetExceeded):
+            await client.complete("many bytes " * 30, max_output_tokens=180)
+        self.assertEqual(stub.calls, 1)
+
+    async def test_exact_count_keeps_parallel_reservations_and_unknown_usage(self):
+        class CountedModel(ModelStub):
+            async def count_input_tokens(self, prompt):
+                await asyncio.sleep(0)
+                return 20
+
+        stub = CountedModel(report_usage=False)
+        budget = RunBudget(RunBudgetLimits(max_elapsed_seconds=30, max_model_tokens=200))
+        client = BudgetedLLMClient(stub, budget)
+        outcomes = await asyncio.gather(*[
+            client.complete("many bytes " * 30, max_output_tokens=100) for _ in range(2)
+        ], return_exceptions=True)
+        self.assertTrue(all(isinstance(item, BudgetExceeded) for item in outcomes))
+        self.assertEqual(stub.calls, 1)
+        self.assertEqual(budget.snapshot()["reserved_model_tokens"], 120)
+
     async def test_settled_parallel_reservations_leave_no_negative_cost(self):
         budget = RunBudget(RunBudgetLimits(max_elapsed_seconds=30, max_model_tokens=10000),
                            pricing=ModelPricing(0.15, 0.60))
@@ -148,12 +189,13 @@ class RunBudgetTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "operator ceiling"):
             prepare_run(SubmittedRunConfiguration(
                 request=request,
-                budgets=BudgetSelection(max_model_tokens=100001),
+                budgets=BudgetSelection(max_model_tokens=200001),
             ), adapters)
         with self.assertRaisesRegex(ValueError, "operator ceiling"):
+            from src.configuration.loader import load_budget_policy
             prepare_run(SubmittedRunConfiguration(
                 request=request,
-                budgets=BudgetSelection(max_source_bytes=10_000_001),
+                budgets=BudgetSelection(max_source_bytes=load_budget_policy().ceilings.max_source_bytes + 1),
             ), adapters)
 
         prepared = prepare_run(SubmittedRunConfiguration(

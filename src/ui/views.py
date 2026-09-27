@@ -7,6 +7,8 @@ import streamlit as st
 from src.guardrails import SensitiveContentError, check_privacy, safe_error_message
 from src.models import PromptInterpretationDraft
 from .candidate_review import candidate_review_view
+from .evaluation_guide import render_criteria_guide
+from .scorecards import render_scorecards
 
 
 def _show_draft(draft: PromptInterpretationDraft, prompt: str) -> None:
@@ -44,12 +46,12 @@ def _result_view(result) -> None:
         st.error(safe_error_message(error))
         return
     st.subheader("Run result")
-    st.write(f"Status: {result.status} · Mode: {result.mode} · Run ID: {result.run_id}")
+    st.write(f"Detailed proposal status: {result.status} · Mode: {result.mode} · Run ID: {result.run_id}")
+    render_criteria_guide(title="Understand the evaluation scores")
     st.json(result.budget_usage.model_dump(mode="json") if result.budget_usage else {})
     for warning in result.warnings:
         st.warning(warning)
-    if result.ranking:
-        st.dataframe([row.model_dump(mode="json") for row in result.ranking], hide_index=True)
+    render_scorecards(result)
     result = candidate_review_view(result)
     with st.expander("Selected source receipts", expanded=False):
         st.dataframe([
@@ -62,31 +64,6 @@ def _result_view(result) -> None:
             }
             for source in result.source_manifest
         ], hide_index=True)
-    for proposal in result.final_proposals:
-        with st.expander(f"#{proposal.rank} {proposal.title} — {proposal.total_score:.1f}", expanded=True):
-            st.text(proposal.problem_statement)
-            st.text("MVP:\n" + "\n".join(proposal.scoped_mvp))
-            st.write("Evaluation:", proposal.evaluation_plan.model_dump(mode="json"))
-            for caveat in proposal.unknowns:
-                st.warning(caveat)
-            st.dataframe([
-                {
-                    "criterion": score.criterion_id,
-                    "score": score.score,
-                    "weight": score.weight,
-                    "weighted_score": score.weighted_score,
-                }
-                for score in proposal.criterion_scores
-            ], hide_index=True)
-            source_by_id = {source.source_id: source for source in result.source_manifest}
-            for claim in proposal.citations:
-                st.text(claim.claim)
-                for reference in claim.references:
-                    source = source_by_id[reference.source_id]
-                    st.caption(
-                        f"{source.source_type} · {source.title} · {reference.source_id}"
-                        + (f" · {source.canonical_url}" if source.canonical_url else "")
-                    )
     with st.expander("Configuration and provenance"):
         st.json(result.prepared_run.model_dump(mode="json") if result.prepared_run else {})
     st.download_button("Download run JSON", result.model_dump_json(indent=2),

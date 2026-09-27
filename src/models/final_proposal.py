@@ -8,6 +8,7 @@ from pydantic import Field, PositiveInt
 
 from .common import ClaimEvidence, ContractModel, Identifier, NonEmptyText
 from .evaluation_result import CriterionScore, TotalScore
+from .proposal_audit import ProposalAudit
 
 
 class AlternativeApproach(ContractModel):
@@ -48,3 +49,4 @@ class FinalProposal(ContractModel):
     first_kill_test: NonEmptyText
     evaluation_plan: ProposalEvaluationPlan
     citations: list[ClaimEvidence] = Field(min_length=1)
+    evidence_audit: ProposalAudit | None = None

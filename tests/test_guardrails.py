@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from src.adapters import FrozenFixtureAdapter
 from src.adapters.user_upload import UserUploadAdapter
-from src.application import run_prepared_research, run_research
+from src.application.service import run_prepared_research, run_research
 from src.guardrails import (
     CONTACT_WARNING, LONG_INPUT_WARNING, GuardrailWarning, SensitiveContentError,
     check_privacy, input_advisories, safe_error_message,
@@ -19,7 +19,7 @@ from src.llm.request_interpreter import LLMRequestInterpreter
 from src.llm.scout_llm import LLMScoutQueryPlanner
 from src.models import InputRequest, SubmittedRunConfiguration
 from src.observability import RunTracer
-from src.preflight import prepare_run
+from src.application.preflight import prepare_run
 from src.prompts import render_prompt
 from src.workers.scout_worker import ScoutWorker
 from tests.test_application import FakeLLMClient as PipelineClient

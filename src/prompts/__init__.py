@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import TypeAdapter, ValidationError
+from src.models.proposal_audit import StatementAudit
 
 from src.models import (
     CandidateAssessment,
@@ -28,6 +29,7 @@ PromptName = Literal[
     "critic_candidate_judge",
     "final_proposal",
     "request_interpreter",
+    "proposal_verifier",
 ]
 PROMPT_DIR = Path(__file__).resolve().parent
 _PROMPTS: dict[PromptName, tuple[str, TypeAdapter]] = {
@@ -37,6 +39,7 @@ _PROMPTS: dict[PromptName, tuple[str, TypeAdapter]] = {
     "critic_candidate_judge": ("critic_candidate_judge.md", TypeAdapter(CandidateAssessment)),
     "final_proposal": ("final_proposal.md", TypeAdapter(ProposalDraft)),
     "request_interpreter": ("request_interpreter.md", TypeAdapter(PromptSuggestions)),
+    "proposal_verifier": ("proposal_statement_verifier.md", TypeAdapter(StatementAudit)),
 }
 _PLACEHOLDER = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
 TRUST_BOUNDARY_INSTRUCTIONS = """# Trust boundary
@@ -70,7 +73,9 @@ def render_prompt(name: PromptName, **context: object) -> str:
         )
     serialized = {}
     for key, value in values.items():
-        encoded = json.dumps(value, ensure_ascii=False, indent=2, default=_json_default)
+        # Compact JSON saves tokens and conservative byte reservations without
+        # dropping evidence or shortening user input.
+        encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=_json_default)
         if key != "OUTPUT_SCHEMA":
             # Prevent input text from closing a data block. This is separation,
             # not a guarantee that a model will resist prompt injection.
@@ -99,15 +104,25 @@ def parse_model_output(name: PromptName, output: str | bytes | object) -> object
 
 
 def repair_known_candidate_field(output: str | bytes) -> str | None:
-    """Repair one unambiguous candidate key typo; leave all other invalid output intact."""
+    """Normalize known envelopes/key typos, then let the full contract validate.
+
+    No candidate fields are dropped, inferred, or filled. This only avoids a
+    paid retry for a singleton or an otherwise unambiguous candidates wrapper.
+    """
 
     try:
         value = json.loads(output)
     except (TypeError, ValueError):
         return None
+    changed = False
+    if isinstance(value, dict) and set(value) == {"candidates"} and isinstance(value["candidates"], list):
+        value = value["candidates"]
+        changed = True
+    elif isinstance(value, dict) and "candidate_id" in value and "title" in value:
+        value = [value]
+        changed = True
     if not isinstance(value, list):
         return None
-    changed = False
     for item in value:
         if not isinstance(item, dict):
             continue

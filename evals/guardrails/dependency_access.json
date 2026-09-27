@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "synthetic": true,
+  "cases": [
+    {"id": "metrics_not_logs", "target": "dependency", "claim": "production user query logs for RAG evaluation", "evidence": "RAG evaluation can measure query relevance and answer faithfulness. This guide describes those metrics; it does not provide query logs.", "expected": "unsupported"},
+    {"id": "logs_available", "target": "dependency", "claim": "sample query logs for an offline research prototype", "evidence": "This downloadable sample provides anonymized query logs for offline research prototypes. Research use is permitted; no production system access is included.", "expected": "supported"},
+    {"id": "labels_unspecified", "target": "dependency", "claim": "crop images with disease severity labels", "evidence": "This public sample provides crop photographs for educational use. Its label categories are not specified.", "expected": "unsupported"},
+    {"id": "patient_access_denied", "target": "dependency", "claim": "patient-level medical records available for this project", "evidence": "Patient-level medical records are not available to this project. Only public aggregate service counts are supplied.", "expected": "contradictory"},
+    {"id": "offline_design_not_fact", "target": "narrative", "claim": "Proposed design to test: a script that compares the provided aggregate wait-time samples. Whether users find it helpful remains unknown.", "evidence": "The public sample provides aggregate wait-time fields and permits educational analysis.", "expected": "supported"},
+    {"id": "comparison_not_established", "target": "narrative", "claim": "Existing tools cannot compare aggregate wait-time samples.", "evidence": "The public sample provides aggregate wait-time fields and permits educational analysis. No tool comparison is included.", "expected": "unsupported"}
+  ]
+}

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-EVALS_DIR = Path(__file__).resolve().parent
+EVALS_DIR = Path(__file__).resolve().parents[1]
 
 
 def load_json(path: Path) -> Any:
@@ -17,6 +17,33 @@ def load_json(path: Path) -> Any:
 
 def validate() -> list[str]:
     errors: list[str] = []
+    for dataset_name in (
+        "claim_support.json", "claim_support_held_out.json",
+        "claim_support_adversarial.json", "proposal_support.json",
+    ):
+        dataset_path = EVALS_DIR / "guardrails" / dataset_name
+        try:
+            dataset = load_json(dataset_path)
+            if dataset.get("synthetic") is not True:
+                errors.append(f"{dataset_name}: guardrail cases must be marked synthetic")
+            cases = dataset.get("cases")
+            if not isinstance(cases, list) or not cases:
+                errors.append(f"{dataset_name}: cases must be a non-empty list")
+                continue
+            ids = set()
+            for case in cases:
+                if not all(isinstance(case.get(key), str) and case[key].strip()
+                           for key in ("id", "claim", "evidence")):
+                    errors.append(f"{dataset_name}: every case needs an ID, claim, and evidence")
+                if case.get("id") in ids:
+                    errors.append(f"{dataset_name}: duplicate case ID {case.get('id')!r}")
+                ids.add(case.get("id"))
+                if case.get("expected") not in {"supported", "unsupported", "contradictory"}:
+                    errors.append(f"{dataset_name}: invalid expected label for {case.get('id')!r}")
+                if case.get("target", "claim") not in {"claim", "narrative", "dependency"}:
+                    errors.append(f"{dataset_name}: invalid target for {case.get('id')!r}")
+        except (OSError, ValueError, TypeError) as error:
+            errors.append(f"{dataset_name}: invalid guardrail dataset ({type(error).__name__})")
     manifest = load_json(EVALS_DIR / "manifest.json")
     search_defaults = load_json(EVALS_DIR.parent / "config" / "search_defaults.json")
     minimum_sources = min(

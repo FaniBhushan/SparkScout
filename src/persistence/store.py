@@ -11,7 +11,7 @@ from time import time
 from uuid import uuid4
 
 from src.guardrails import check_privacy
-from src.failures import failure_code
+from src.runtime.failures import failure_code
 
 
 class CheckpointError(RuntimeError):

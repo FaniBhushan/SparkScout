@@ -1,0 +1,12 @@
+{
+  "version": "1.1",
+  "synthetic": true,
+  "cases": [
+    {"id": "disease_labels_missing", "target": "task_data_fit", "required_data": ["labeled crop images"], "claim": "Train a supervised classifier of leaf disease categories.", "evidence": "The benchmark provides public labeled crop images for non-commercial research. The label categories are unspecified.", "expected": "unsupported"},
+    {"id": "disease_labels_present", "target": "task_data_fit", "required_data": ["crop images annotated with disease categories"], "claim": "Train a supervised classifier of leaf disease categories.", "evidence": "The public benchmark provides crop images annotated with healthy, rust, and blight disease categories. Non-commercial research and model training are permitted.", "expected": "supported"},
+    {"id": "inspect_available_images", "target": "task_data_fit", "required_data": ["downloadable crop-image files"], "claim": "Build an offline image-size and missing-file inspection report for the supplied crop images, without disease prediction.", "evidence": "The public crop-image collection is downloadable for non-commercial research. Disease labels are not specified.", "expected": "supported"},
+    {"id": "patient_prediction_from_aggregates", "target": "task_data_fit", "required_data": ["patient-level medical records with diagnosis labels"], "claim": "Predict individual patient diagnoses from patient-level medical records.", "evidence": "Only public aggregate service counts and wait-time fields are supplied for educational analysis. No patient-level records or diagnosis labels are included.", "expected": "contradictory"},
+    {"id": "aggregate_comparison", "target": "task_data_fit", "required_data": ["public aggregate wait-time fields"], "claim": "Compare aggregate wait-time fields offline and report missing values.", "evidence": "Public aggregate service-count and wait-time fields are supplied for educational analysis. No patient-level records are included.", "expected": "supported"},
+    {"id": "query_logs_not_metrics", "target": "task_data_fit", "required_data": ["recorded production queries and ground-truth answers"], "claim": "Measure real user-query relevance against recorded production queries and ground-truth answers.", "evidence": "This article explains RAG relevance and faithfulness metrics. No query logs or ground-truth answers are supplied.", "expected": "unsupported"}
+  ]
+}

@@ -26,6 +26,7 @@ class EvaluationConfiguration(ContractModel):
     retrieval_top_k: PositiveInt = 2
     max_context_chunks: PositiveInt = 12
     max_context_tokens: PositiveInt = 4000
+    allow_provisional_narrative: bool = False
 
     @model_validator(mode="after")
     def validate_weights(self) -> "EvaluationConfiguration":

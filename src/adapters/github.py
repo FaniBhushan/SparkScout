@@ -14,6 +14,8 @@ from .http_json import SourcePayloadError, request_json
 
 
 class GitHubAdapter:
+    """Retrieve repository metadata only; this adapter does not fetch file contents."""
+
     provider_id = "github"
     endpoint = "https://api.github.com/search/repositories"
 
@@ -29,6 +31,7 @@ class GitHubAdapter:
         self.max_results = max_results
 
     async def search(self, query: SourceQuery) -> list[SourceRecord]:
+        """Search GitHub repositories within the query's declared permissions."""
         if query.provider_id != self.provider_id:
             raise ValueError(f"query provider must be {self.provider_id!r}")
         if "code_repository" not in query.source_types:

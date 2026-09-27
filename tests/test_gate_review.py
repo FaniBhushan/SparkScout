@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from streamlit.testing.v1 import AppTest
 
 from src.adapters import FrozenFixtureAdapter
-from src.application import run_research
+from src.application.service import run_research
 from src.evaluation.review import record_candidate_review
 from src.models import InputRequest, OrchestrationResult
 from test_application import FakeLLMClient

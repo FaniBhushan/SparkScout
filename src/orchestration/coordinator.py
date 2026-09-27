@@ -11,8 +11,8 @@ from typing import Literal
 import unicodedata
 from uuid import uuid4
 
-from src.budgets import BudgetExceeded
-from src.failures import failure_code
+from src.runtime.budgets import BudgetExceeded
+from src.runtime.failures import failure_code
 from src.models import (
     EvaluationConfiguration,
     CriticResult,
@@ -31,6 +31,8 @@ from src.retrieval import HybridInMemoryRetriever, load_retrieval_index_configur
 from src.workers.critic_worker import CriticWorker
 from src.workers.library_worker import LibraryWorker
 from src.workers.scout_worker import ScoutWorker
+from src.sources.merge import capture_excerpts, is_live_source, merge_source_records
+from src.workers.evidence import build_source_chunks
 
 
 RunMode = Literal["sequential", "parallel"]
@@ -69,13 +71,14 @@ class Orchestrator:
         rubric: EvaluationConfiguration,
         *,
         mode: RunMode = "parallel",
+        run_id: str | None = None,
     ) -> OrchestrationResult:
         if mode not in ("sequential", "parallel"):
             raise ValueError("mode must be 'sequential' or 'parallel'")
         if request.domain.casefold() != search.domain.casefold():
             raise ValueError("request and resolved search domains must match")
 
-        run_id = self.checkpoint.run_id if self.checkpoint else uuid4().hex
+        run_id = run_id or (self.checkpoint.run_id if self.checkpoint else uuid4().hex)
         span = self.tracer.span("orchestrator", task_id=run_id) if self.tracer else nullcontext()
         with span:
             scout_result, library_result = await self._run_branches(request, search, mode)
@@ -83,8 +86,41 @@ class Orchestrator:
                 scout_result = ScoutResult.model_validate(scout_result)
                 library_result = LibraryResult.model_validate(library_result)
                 self._validate_branch_results(request, scout_result, library_result)
+                quarantined: set[str] = set()
                 source_manifest = self._merge_sources(
-                    scout_result.sources, library_result.sources
+                    scout_result.sources, library_result.sources, quarantined=quarantined,
+                )
+                if quarantined:
+                    # An ambiguous ID cannot safely back a candidate or citation.
+                    # Remove affected candidates rather than silently rewriting evidence.
+                    warning = "Conflicting live sources quarantined: " + ", ".join(sorted(quarantined))
+                    scout_result = ScoutResult(
+                        candidates=[candidate for candidate in scout_result.candidates
+                                    if not any(ref.source_id in quarantined for ref in candidate.evidence)],
+                        sources=[source for source in scout_result.sources if source.source_id not in quarantined],
+                        warnings=[*scout_result.warnings, warning],
+                    )
+                    library_result = LibraryResult(
+                        sources=[source for source in library_result.sources if source.source_id not in quarantined],
+                        chunks=[chunk for chunk in library_result.chunks if chunk.source_id not in quarantined],
+                        warnings=[*library_result.warnings, warning],
+                    )
+                    if self.tracer:
+                        self.tracer.event("orchestrator", "source_receipt_quarantined", count=len(quarantined))
+                # Retain Library citation IDs and add distinct Scout excerpts only
+                # for sources already retrieved by Library. Coverage stays independent.
+                library_ids = {source.source_id for source in library_result.sources}
+                merged_library = [source for source in source_manifest if source.source_id in library_ids]
+                chunks = {chunk.chunk_id: chunk for chunk in library_result.chunks}
+                existing_texts = {(chunk.source_id, chunk.text) for chunk in chunks.values()}
+                for chunk in build_source_chunks([source for source in merged_library if source.excerpts]):
+                    if chunk.chunk_id in chunks and chunks[chunk.chunk_id].text != chunk.text:
+                        raise ValueError("conflicting joined evidence chunk")
+                    if (chunk.source_id, chunk.text) not in existing_texts:
+                        chunks[chunk.chunk_id] = chunk
+                        existing_texts.add((chunk.source_id, chunk.text))
+                library_result = LibraryResult(
+                    sources=merged_library, chunks=list(chunks.values()), warnings=library_result.warnings,
                 )
             except OrchestrationError:
                 raise
@@ -213,6 +249,7 @@ class Orchestrator:
                     count=len(finalists),
                 )
             return OrchestrationResult(
+                requested_finalist_count=request.finalist_count,
                 run_id=run_id,
                 mode=mode,
                 status=status,
@@ -233,6 +270,11 @@ class Orchestrator:
         search: ResolvedSearchConfiguration,
         mode: RunMode,
     ):
+        """Run Scout and Library under the same policy, sequentially or concurrently.
+
+        In parallel mode either branch is required, so a failure cancels and drains
+        its sibling instead of leaving provider work running in the background.
+        """
         scout_request = request.model_copy(deep=True)
         library_request = request.model_copy(deep=True)
         if mode == "sequential":
@@ -361,7 +403,9 @@ class Orchestrator:
         return None
 
     @staticmethod
-    def _merge_sources(*groups: list[SourceRecord]) -> list[SourceRecord]:
+    def _merge_sources(
+        *groups: list[SourceRecord], quarantined: set[str] | None = None,
+    ) -> list[SourceRecord]:
         by_id: dict[str, list[SourceRecord]] = {}
         for source in (item for group in groups for item in group):
             by_id.setdefault(source.source_id, []).append(source)
@@ -369,17 +413,19 @@ class Orchestrator:
         merged = []
         for source_id in sorted(by_id):
             records = sorted(by_id[source_id], key=lambda item: item.query_id)
-            baseline = records[0]
+            baseline = capture_excerpts(records[0])
             for record in records[1:]:
-                identity = (baseline.provider, baseline.source_type, baseline.canonical_url,
-                            baseline.content_hash)
-                other = (record.provider, record.source_type, record.canonical_url,
-                         record.content_hash)
-                if identity != other:
+                try:
+                    baseline = merge_source_records(baseline, record)
+                except ValueError as error:
+                    if quarantined is not None and all(is_live_source(item) for item in records):
+                        quarantined.add(source_id)
+                        break
                     raise OrchestrationError(
                         "join", ValueError(f"conflicting source records for {source_id!r}")
-                    )
-            merged.append(baseline)
+                    ) from error
+            if quarantined is None or source_id not in quarantined:
+                merged.append(baseline)
         return merged
 
     @staticmethod
@@ -404,7 +450,7 @@ class Orchestrator:
 
         ordered = sorted(
             evaluations,
-            key=lambda item: (not item.gate_passed, -item.total_score, item.candidate_id),
+            key=lambda item: (-item.total_score, item.candidate_id),
         )
         return [
             RankedCandidate(

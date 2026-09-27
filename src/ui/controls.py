@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import streamlit as st
 
+from .evaluation_guide import (
+    RUBRIC_PRESET_HELP,
+    SEARCH_PRESET_HELP,
+    criterion_help_text,
+    render_criteria_guide,
+)
 from .state import _remember
 
 
@@ -68,45 +74,57 @@ def _domain_control(domains: list[str]) -> None:
 
 
 def _simple_controls(catalog) -> None:
-    st.subheader("Simple configuration")
-    _domain_control(catalog.domains)
-    _field("request.time_limit_days", 30, st.number_input, "Time available (days)", min_value=1)
-    _text_list("request.interests", "Interests or subdomain (comma separated)")
-    _field("search.preset", "balanced", st.selectbox, "Search preset", options=catalog.search_presets)
-    _policy_widget(
-        "include_types", st.multiselect, "Optional source types",
-        options=catalog.source_types,
-    )
-    _field(
-        "search.recency_days", None, st.selectbox, "Recency",
-        options=[None, 365, 1095, 1825, 3650],
-        format_func=lambda value: "Preset default" if value is None else f"Last {value} days",
-    )
-    _field(
-        "evaluation.rubric_preset", catalog.default_rubric,
-        st.selectbox, "Evaluation priority", options=catalog.rubric_presets,
-    )
+    request_col, research_col = st.columns(2)
+    with request_col:
+        _domain_control(catalog.domains)
+        _field("request.time_limit_days", 30, st.number_input, "Time available (days)", min_value=1)
+        _text_list("request.interests", "Interests or subdomain (comma separated)")
+    with research_col:
+        search_preset = _field(
+            "search.preset", "balanced", st.selectbox, "Search preset",
+            options=catalog.search_presets,
+            help="Choose the search window and source balance. It does not change evaluation scoring.",
+        )
+        st.caption(SEARCH_PRESET_HELP.get(search_preset, "Uses the selected search preset."))
+        _policy_widget(
+            "include_types", st.multiselect, "Optional source types",
+            options=catalog.source_types,
+        )
+        _field(
+            "search.recency_days", None, st.selectbox, "Recency",
+            options=[None, 365, 1095, 1825, 3650],
+            format_func=lambda value: "Preset default" if value is None else f"Last {value} days",
+        )
+        rubric_preset = _field(
+            "evaluation.rubric_preset", catalog.default_rubric,
+            st.selectbox, "Evaluation priority", options=catalog.rubric_presets,
+            help="Choose which evaluation criteria matter more in the weighted ranking.",
+        )
+        st.caption(RUBRIC_PRESET_HELP.get(rubric_preset, "Uses the selected evaluation preset."))
+    render_criteria_guide()
     st.caption("Other settings use the catalog defaults. Frozen fixtures are synthetic evidence only.")
 
 
 def _advanced_controls(catalog) -> None:
-    st.subheader("Advanced configuration")
-    _field("search.provider_ids", [], st.multiselect, "Ready providers (empty = automatic)",
-           options=catalog.providers)
-    _field("search.content_types", [], st.multiselect, "Content types (empty = automatic)",
-           options=catalog.content_types)
-    if catalog.languages:
-        _field("search.language", None, st.selectbox, "Document language (declared)",
-               options=[None, *catalog.languages],
-               format_func=lambda value: "Any" if value is None else value)
-    _policy_widget("required_types", st.multiselect, "Required source types",
-                   options=catalog.source_types)
-    _policy_widget("exclude_types", st.multiselect, "Excluded source types",
-                   options=catalog.source_types)
-    _field("search.evidence_tiers", [], st.multiselect, "Evidence tiers (empty = all)",
-           options=catalog.evidence_tiers)
-    _field("search.fallback_policy", "skip_unavailable", st.selectbox,
-           "Unavailable optional providers", options=["skip_unavailable", "fail_if_unavailable"])
+    provider_col, policy_col = st.columns(2)
+    with provider_col:
+        _field("search.provider_ids", [], st.multiselect, "Ready providers (empty = automatic)",
+               options=catalog.providers)
+        _field("search.content_types", [], st.multiselect, "Content types (empty = automatic)",
+               options=catalog.content_types)
+        if catalog.languages:
+            _field("search.language", None, st.selectbox, "Document language (declared)",
+                   options=[None, *catalog.languages],
+                   format_func=lambda value: "Any" if value is None else value)
+    with policy_col:
+        _policy_widget("required_types", st.multiselect, "Required source types",
+                       options=catalog.source_types)
+        _policy_widget("exclude_types", st.multiselect, "Excluded source types",
+                       options=catalog.source_types)
+        _field("search.evidence_tiers", [], st.multiselect, "Evidence tiers (empty = all)",
+               options=catalog.evidence_tiers)
+        _field("search.fallback_policy", "skip_unavailable", st.selectbox,
+               "Unavailable optional providers", options=["skip_unavailable", "fail_if_unavailable"])
 
     st.markdown("**Dates and search caps**")
     col1, col2 = st.columns(2)
@@ -180,10 +198,11 @@ def _advanced_controls(catalog) -> None:
     _field("evaluation.retrieval_top_k", catalog.default_retrieval_top_k,
            st.number_input, "Retrieval top-k per criterion",
            min_value=1, max_value=catalog.max_context_chunks)
-    _field("request.desired_candidate_count", 1, st.number_input,
+    _field("request.desired_candidate_count", 5, st.number_input,
            "Candidate ideas", min_value=1, max_value=20)
-    _field("request.finalist_count", 1, st.number_input,
-           "Final proposals", min_value=1, max_value=5)
+    _field("request.finalist_count", 2, st.number_input,
+           "Finalists to display", min_value=1, max_value=5,
+           help="Highest weighted scores. Gate failures remain visible as warnings.")
 
     st.markdown("**Exact scoring weights**")
     def change_weights_toggle() -> None:
@@ -205,7 +224,8 @@ def _advanced_controls(catalog) -> None:
         preset = st.session_state.ui_values.get("evaluation.rubric_preset", catalog.default_rubric)
         default_weights = catalog.rubric_weights[preset]
         weights = dict(st.session_state.ui_values.get("evaluation.weights") or default_weights)
-        for criterion_id, label in catalog.criteria_labels.items():
+        weight_columns = st.columns(2)
+        for index, (criterion_id, label) in enumerate(catalog.criteria_labels.items()):
             key = f"weight:{criterion_id}"
             if key not in st.session_state:
                 st.session_state[key] = weights[criterion_id]
@@ -216,9 +236,21 @@ def _advanced_controls(catalog) -> None:
                 st.session_state.ui_values["evaluation.weights"] = current
                 st.session_state.ui_explicit.add("evaluation.weights")
 
-            st.number_input(label, min_value=0, max_value=100, key=key,
-                            on_change=change_weight)
+            with weight_columns[index % 2]:
+                st.number_input(
+                    label, min_value=0, max_value=100, key=key,
+                    on_change=change_weight,
+                    help=(criterion_help_text(criterion_id)
+                          + "\n\nWeight effect: this percentage controls the criterion's "
+                          "contribution to the 0–100 ranking. Zero removes its numeric "
+                          "contribution, but the criterion is still assessed and hard gates still apply."),
+                )
         st.caption(f"Weight total: {sum((st.session_state.ui_values.get('evaluation.weights') or weights).values())}%")
+        st.caption(
+            "Weights must total 100%. A zero weight removes only the numeric contribution; "
+            "it does not turn off assessment or hard gates. Scores are 0–5, while weights "
+            "set their influence on the final 0–100 ranking."
+        )
     else:
         st.session_state.ui_explicit.discard("evaluation.weights")
     st.caption("Language filtering applies only to user-declared upload language. Live providers do not supply a verified document language. No remote pages are fetched.")
@@ -258,5 +290,3 @@ def _prompt_text() -> str:
     if instructions.strip():
         parts.append("Search and evaluation preferences: " + instructions.strip())
     return "\n\n".join(part for part in parts if part)
-
-

@@ -5,7 +5,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from src.budgets import BudgetExceeded
+from src.runtime.budgets import BudgetExceeded
 from src.models import InputRequest
 from src.orchestration.coordinator import OrchestrationError, Orchestrator
 

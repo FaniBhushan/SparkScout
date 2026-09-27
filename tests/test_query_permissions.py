@@ -15,9 +15,16 @@ class FixedPlanner:
         return [self.query]
 
 
-class UncalledAdapter:
+class PermissionCheckingAdapter:
+    def __init__(self, provider):
+        self.provider = provider
+
     async def search(self, query):
-        raise AssertionError("invalid query reached an adapter")
+        # Recovery may issue a new, valid query after the invalid plan is skipped.
+        assert query.provider_id == self.provider.provider_id
+        assert set(query.content_types).issubset(self.provider.content_types)
+        assert set(query.source_types).issubset(self.provider.source_types)
+        return []
 
 
 class UncalledGenerator:
@@ -47,7 +54,8 @@ class QueryPermissionTests(unittest.IsolatedAsyncioTestCase):
             max_results_per_query=2,
             max_sources=2,
         )
-        self.adapters = {"github": UncalledAdapter(), "tavily": UncalledAdapter()}
+        self.adapters = {provider.provider_id: PermissionCheckingAdapter(provider)
+                         for provider in self.search.providers}
 
     async def test_scout_skips_content_unavailable_from_selected_provider(self) -> None:
         query = ScoutQuery(

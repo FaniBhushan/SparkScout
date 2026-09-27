@@ -13,38 +13,51 @@ from pydantic import ValidationError
 
 from src.adapters import build_available_adapters
 from src.adapters.frozen_fixture import DEFAULT_FIXTURE_ROOT
-from src.application import run_prepared_research
-from src.demo import OfflineDemoClient
+from src.application.service import run_prepared_research
+from src.testing.demo import OfflineDemoClient
 from src.guardrails import SensitiveContentError, input_advisories, safe_error_message
 from src.llm.client import ModelPricing, OpenAITextClient
 from src.llm.request_interpreter import LLMRequestInterpreter
 from src.models import PreparedRun
 from src.observability import RunTracer
-from src.preflight import prepare_run
+from src.application.preflight import prepare_run
 from .configuration import interface_catalog, submitted_from_controls
 from .controls import _advanced_controls, _prompt_text, _simple_controls
-from .state import _accepted_paths, _acknowledged_issues, _fingerprint, _initialize
+from .state import _accepted_paths, _acknowledged_issues, _fingerprint, _initialize, _reset_search
 from .views import _result_view, _show_draft
 
 
 def main() -> None:
     st.set_page_config(page_title="ScoutSpark", layout="wide")
     _initialize()
+    if st.session_state.ui_page == "results" and st.session_state.result is not None:
+        st.title("Research results")
+        back_col, new_col, _ = st.columns([1, 1, 5])
+        if back_col.button("← Back to input"):
+            st.session_state.ui_page = "configure"
+            st.rerun()
+        if new_col.button("Start new search", type="primary"):
+            _reset_search()
+            st.rerun()
+        _result_view(st.session_state.result)
+        return
+
     st.title("ScoutSpark")
     st.caption("Review the source plan and scoring weights before starting research.")
 
-    data_mode = st.radio("Data mode", ["Offline demo", "Live sources"], horizontal=True)
+    data_mode = st.radio("Data mode", ["Offline demo", "Live sources"], horizontal=True,
+                         key="data_mode")
     if st.session_state.get("last_data_mode") != data_mode:
         if data_mode == "Live sources":
             st.session_state.ui_explicit.difference_update({
                 "request.domain", "request.time_limit_days",
                 "request.desired_candidate_count", "request.finalist_count",
             })
-            st.session_state.ui_values["request.desired_candidate_count"] = 12
-            st.session_state.ui_values["request.finalist_count"] = 3
+            st.session_state.ui_values["request.desired_candidate_count"] = 5
+            st.session_state.ui_values["request.finalist_count"] = 2
         else:
-            st.session_state.ui_values["request.desired_candidate_count"] = 1
-            st.session_state.ui_values["request.finalist_count"] = 1
+            st.session_state.ui_values["request.desired_candidate_count"] = 5
+            st.session_state.ui_values["request.finalist_count"] = 2
             st.session_state.ui_explicit.update({
                 "request.domain", "request.time_limit_days",
                 "request.desired_candidate_count", "request.finalist_count",
@@ -64,7 +77,8 @@ def main() -> None:
         st.info("Fully offline demo: frozen synthetic sources and deterministic model responses. Not real-world evidence.")
     else:
         uploads = st.file_uploader("Your documents (.txt, .md, .pdf; up to 5)",
-                                   type=["txt", "md", "pdf"], accept_multiple_files=True)
+                                   type=["txt", "md", "pdf"], accept_multiple_files=True,
+                                   key="source_uploads")
         if uploads:
             upload_language = st.selectbox("Language of uploaded documents (your declaration)",
                                            ["en", "de", "fr", "es"])
@@ -125,13 +139,16 @@ def main() -> None:
         if not os.getenv("OPENAI_API_KEY"):
             st.warning("OPENAI_API_KEY is required to draft or run with a live model.")
 
-    mode = st.radio("Configuration mode", ["Simple", "Advanced"], horizontal=True)
+    mode = st.radio("Configuration mode", ["Simple", "Advanced"], horizontal=True,
+                    key="config_mode")
     st.session_state.ui_values["search.mode"] = mode.lower()
     if mode == "Advanced":
         st.session_state.ui_explicit.add("search.mode")
-    _simple_controls(catalog)
+    with st.expander("Simple configuration", expanded=mode == "Simple"):
+        _simple_controls(catalog)
     if mode == "Advanced":
-        _advanced_controls(catalog)
+        with st.expander("Advanced configuration", expanded=True):
+            _advanced_controls(catalog)
     elif any(path.startswith(("budgets.", "search.content_types", "search.provider_ids",
                                    "search.language", "search.evidence_tiers",
                                    "search.published_", "evaluation.weights"))
@@ -172,7 +189,13 @@ def main() -> None:
         _show_draft(draft, prompt)
 
     fingerprint = _fingerprint(prompt, data_mode, fixture_set)
-    if st.button("Preview configuration"):
+    st.info(
+        "Preview checks that your request and settings can run, then shows which "
+        "sources, limits, evaluation weights, and budget will be used. It does not "
+        "start research or call search providers or the model. Review the plan here "
+        "before selecting Start research."
+    )
+    if st.button("Preview and validate configuration", help="Resolve and check the run plan before any research begins."):
         try:
             if upload_error or input_error:
                 raise ValueError(upload_error or input_error)
@@ -269,6 +292,7 @@ def main() -> None:
                     mode=run_mode,
                 ))
                 st.session_state.result = result
+                st.session_state.ui_page = "results"
                 progress.progress(100, text="Run complete")
                 status.update(label="Run complete", state="complete")
             except Exception as error:
@@ -277,5 +301,5 @@ def main() -> None:
                 st.error(safe_error_message(error))
             finally:
                 tracer.close()
-    if st.session_state.result is not None:
-        _result_view(st.session_state.result)
+    if st.session_state.ui_page == "results":
+        st.rerun()

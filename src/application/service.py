@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from src.adapters.base import SourceAdapter
-from src.budgets import BudgetExceeded, BudgetedLLMClient, BudgetedSourceAdapter, RunBudget
-from src.finalization import ProposalCoverageError, finalize_proposals
+from src.runtime.budgets import BudgetExceeded, BudgetedLLMClient, BudgetedSourceAdapter, RunBudget
+from src.application.finalization import ProposalCoverageError, finalize_proposals
 from src.guardrails import check_privacy, emit_advisories, input_advisories
 from src.llm import (
     LLMCandidateGenerator,
@@ -19,6 +19,7 @@ from src.llm import (
     LLMScoutQueryPlanner,
 )
 from src.llm.client import LLMClient, ModelPricing
+from src.llm.proposal_verifier import LLMProposalVerifier
 from src.models import (
     EvaluationSelection,
     InputRequest,
@@ -30,14 +31,15 @@ from src.models import (
 )
 from src.observability import RunTracer
 from src.orchestration.coordinator import Orchestrator, RunMode
-from src.preflight import prepare_run
+from src.application.preflight import prepare_run
 from src.retrieval import InMemoryRetriever
 from src.workers.critic_worker import CriticWorker
 from src.workers.library_worker import LibraryWorker
 from src.workers.scout_worker import ScoutWorker
 from src.persistence import RunStore
 from src.persistence.identity import run_identity
-from src.persistence.workers import CheckpointWorker, CheckpointWriter
+from src.persistence.workers import CheckpointWorker, CheckpointWriter, CheckpointVerifier
+from src.application.recovery import recover_empty_result
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,7 @@ class LLMOutputLimits:
     library_queries: int = 1000
     critic_assessment: int = 3000
     final_proposal: int = 4000
+    proposal_verification: int = 2000
 
     def __post_init__(self) -> None:
         if any(value <= 0 for value in vars(self).values()):
@@ -74,6 +77,15 @@ def _redact_uploaded_text(data: dict[str, object], prepared: PreparedRun) -> Non
         if chunk["source_id"] in upload_ids:
             chunk["text"] = "[Uploaded text omitted from exported result]"
             chunk["text_redacted"] = True
+    for proposal in data["final_proposals"]:
+        audit = proposal.get("evidence_audit")
+        if audit:
+            # Quotes may contain uploaded text even when Library chunks have
+            # already been redacted. Keep verdicts but omit all audit excerpts.
+            for verdict in [*audit["claims"], *audit["dependencies"],
+                            *audit["narrative_checks"].values()]:
+                verdict["evidence_quotes"] = []
+            audit["quotes_redacted"] = True
 
 
 async def run_research(
@@ -192,6 +204,10 @@ async def _execute_prepared_research(
         if store.read("normalized", prepared.configuration_checksum, PreparedRun) is None:
             store.write("normalized", prepared.configuration_checksum, prepared)
     run_client = BudgetedLLMClient(llm_client, budget)
+    # Discovery/scoring should not consume the allowance needed to write and
+    # verify a result. This is inside (not additional to) the user's token cap.
+    research_client = BudgetedLLMClient(
+        llm_client, budget, headroom_tokens=min(30000, prepared.budgets.max_model_tokens // 3))
     run_adapters = {
         provider_id: BudgetedSourceAdapter(available_adapters[provider_id], provider_id, budget)
         for provider_id in selected
@@ -200,14 +216,15 @@ async def _execute_prepared_research(
     search = prepared.search
     rubric = prepared.evaluation
 
+    generator = LLMCandidateGenerator(
+        research_client, max_output_tokens=output_limits.candidate_generation, tracer=tracer
+    )
     scout = ScoutWorker(
         run_adapters,
         LLMScoutQueryPlanner(
             run_client, max_output_tokens=output_limits.scout_queries, tracer=tracer
         ),
-        LLMCandidateGenerator(
-            run_client, max_output_tokens=output_limits.candidate_generation, tracer=tracer
-        ),
+        generator,
         tracer=tracer,
     )
     library = LibraryWorker(
@@ -221,19 +238,31 @@ async def _execute_prepared_research(
     critic = CriticWorker(
         InMemoryRetriever([]),
         LLMCandidateJudge(
-            run_client, max_output_tokens=output_limits.critic_assessment, tracer=tracer
+            research_client, max_output_tokens=output_limits.critic_assessment, tracer=tracer
         ),
         tracer=tracer,
     )
     writer = LLMProposalWriter(
         run_client, max_output_tokens=output_limits.final_proposal, tracer=tracer
     )
+    verifier = LLMProposalVerifier(
+        run_client, max_output_tokens=output_limits.proposal_verification, tracer=tracer,
+    )
+    # Recovery may use the allowance initially protected from exploration, but
+    # still leaves a smaller drafting reserve inside the same run-wide cap.
+    recovery_client = BudgetedLLMClient(
+        llm_client, budget, headroom_tokens=min(12000, prepared.budgets.max_model_tokens // 6))
+    recovery_generator = LLMCandidateGenerator(
+        recovery_client, max_output_tokens=output_limits.candidate_generation, tracer=tracer)
+    recovery_critic = CriticWorker(InMemoryRetriever([]), LLMCandidateJudge(
+        recovery_client, max_output_tokens=output_limits.critic_assessment, tracer=tracer), tracer=tracer)
     if store:
         from src.models import ScoutResult, LibraryResult, CriticResult
         scout = CheckpointWorker(scout, store, "scout", ScoutResult)
         library = CheckpointWorker(library, store, "library", LibraryResult)
         critic = CheckpointWorker(critic, store, "critic", CriticResult)
         writer = CheckpointWriter(writer, store)
+        verifier = CheckpointVerifier(verifier, store)
 
     async def execute() -> OrchestrationResult:
         coordinator = Orchestrator(scout, library, critic, tracer=tracer)
@@ -244,9 +273,17 @@ async def _execute_prepared_research(
                                        OrchestrationResult, orchestrate) if store else await orchestrate()
         try:
             if store:
-                return await store.run_stage("finalized", result.model_dump(mode="json"),
-                    OrchestrationResult, lambda: finalize_proposals(request, result, writer))
-            return await finalize_proposals(request, result, writer)
+                finalized = await store.run_stage("finalized", result.model_dump(mode="json"),
+                    OrchestrationResult, lambda: finalize_proposals(request, result, writer, verifier,
+                        allow_provisional_narrative=rubric.allow_provisional_narrative, tracer=tracer))
+            else:
+                finalized = await finalize_proposals(request, result, writer, verifier,
+                    allow_provisional_narrative=rubric.allow_provisional_narrative, tracer=tracer)
+            return await recover_empty_result(
+                request, search, rubric, finalized, adapters=run_adapters, budget=budget,
+                generator=recovery_generator, critic=recovery_critic, writer=writer, verifier=verifier,
+                tracer=tracer, store=store,
+            )
         except ProposalCoverageError as error:
             # Evidence insufficiency is a reportable outcome, not a fabricated draft.
             data = result.model_dump(mode="python")

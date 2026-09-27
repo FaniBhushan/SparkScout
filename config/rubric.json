@@ -2,6 +2,7 @@
   "schema_version": "1.0",
   "status": "provisional",
   "default_preset": "balanced",
+  "allow_provisional_narrative": true,
   "criteria": {
     "problem_value": {
       "label": "Problem value",

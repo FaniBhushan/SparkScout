@@ -7,8 +7,8 @@ import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from src.failures import RetryableFailure
-from src.retry import retry_after_seconds
+from src.runtime.failures import RetryableFailure
+from src.runtime.retry import retry_after_seconds
 
 
 class SourceAdapterError(RuntimeError):

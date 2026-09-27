@@ -2,7 +2,7 @@
 
 import unittest
 
-from src.configuration import load_source_configuration, resolve_search_configuration
+from src.configuration.loader import load_source_configuration, resolve_search_configuration
 from src.models import DomainRoute, InputRequest, SearchLimits
 
 

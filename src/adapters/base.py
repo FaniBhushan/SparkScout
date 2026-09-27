@@ -11,4 +11,6 @@ from src.models.source_record import SourceRecord
 class SourceAdapter(Protocol):
     """Search one approved provider and return normalized source receipts."""
 
-    async def search(self, query: SourceQuery) -> list[SourceRecord]: ...
+    async def search(self, query: SourceQuery) -> list[SourceRecord]:
+        """Return bounded, validated receipts for the requested provider query."""
+        ...

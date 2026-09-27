@@ -14,16 +14,29 @@ from src.models import RunBudgetLimits
 from src.models.scout_query import SourceQuery
 from src.models.source_record import SourceRecord
 from src.observability import RunTracer
-from src.failures import RetryableFailure
-from src.retry import wait_before_retry
+from src.runtime.failures import RetryableFailure
+from src.runtime.retry import wait_before_retry
 
 
 class BudgetExceeded(ModelResponseError):
     """A configured limit prevents the next action or invalidates its result."""
 
 
+class ModelAllowanceExceeded(BudgetExceeded):
+    """A pre-call reservation did not fit; no generation request was sent."""
+
+
+class StageAllowanceExceeded(ModelAllowanceExceeded):
+    """Research must stop so remaining tokens can be used for finalization."""
+
+
 class RunBudget:
-    """One shared counter for both branches and final proposal writing."""
+    """Coordinate run-wide limits across concurrent and later workflow stages.
+
+    Reservations happen before provider calls so parallel branches cannot each
+    spend the same remaining allowance. Unknown usage keeps its reserved amount
+    rather than optimistically refunding tokens that may have been consumed.
+    """
 
     def __init__(
         self,
@@ -71,7 +84,18 @@ class RunBudget:
         if monotonic() - self.started_at >= self.limits.max_elapsed_seconds:
             raise BudgetExceeded("run time budget exhausted")
 
-    async def reserve_model_call(self, prompt: str, max_output_tokens: int) -> tuple[int, float]:
+    def output_allowance_fits(self, max_output_tokens: int, headroom_tokens: int = 0) -> bool:
+        """Skip token-count requests when even a zero-input call cannot fit."""
+        tokens_fit = (self._used_tokens + self._reserved_tokens + max_output_tokens
+                      <= self.limits.max_model_tokens - headroom_tokens)
+        cap = self.limits.max_estimated_cost_usd
+        cost_fits = cap is None or (
+            self._used_cost + self._reserved_cost + self._cost(0, max_output_tokens) <= cap)
+        return tokens_fit and cost_fits
+
+    async def reserve_model_call(self, prompt: str, max_output_tokens: int,
+                                 *, input_tokens: int | None = None,
+                                 headroom_tokens: int = 0) -> tuple[int, float]:
         """Reserve a conservative text-input estimate plus all possible output."""
 
         if type(max_output_tokens) is not int or max_output_tokens <= 0:
@@ -79,16 +103,20 @@ class RunBudget:
 
         # Every UTF-8 byte is counted as a potential token, with small framing
         # headroom. Reported API usage replaces this estimate after the call.
-        input_ceiling = len(prompt.encode("utf-8")) + 32
+        if input_tokens is not None and (type(input_tokens) is not int or input_tokens < 0):
+            raise ValueError("input_tokens must be a non-negative integer")
+        input_ceiling = len(prompt.encode("utf-8")) + 32 if input_tokens is None else input_tokens
         reserved_tokens = input_ceiling + max_output_tokens
         reserved_cost = self._cost(input_ceiling, max_output_tokens)
         async with self._lock:
             self.check_time()
+            if headroom_tokens and self._used_tokens + self._reserved_tokens + reserved_tokens > self.limits.max_model_tokens - headroom_tokens:
+                raise StageAllowanceExceeded("research stopped to retain finalization token allowance")
             if self._used_tokens + self._reserved_tokens + reserved_tokens > self.limits.max_model_tokens:
-                raise BudgetExceeded("run model token budget would be exceeded")
+                raise ModelAllowanceExceeded("run model token budget would be exceeded")
             cost_limit = self.limits.max_estimated_cost_usd
             if cost_limit is not None and self._used_cost + self._reserved_cost + reserved_cost > cost_limit:
-                raise BudgetExceeded("run estimated cost budget would be exceeded")
+                raise ModelAllowanceExceeded("run estimated cost budget would be exceeded")
             self._reserved_tokens += reserved_tokens
             self._reserved_cost += reserved_cost
             self.persist()
@@ -194,9 +222,13 @@ class RunBudget:
 class BudgetedLLMClient:
     """Reserve before each model call, including parallel branch calls."""
 
-    def __init__(self, client: LLMClient, budget: RunBudget) -> None:
+    def __init__(self, client: LLMClient, budget: RunBudget, *, headroom_tokens: int = 0) -> None:
+        if type(headroom_tokens) is not int or headroom_tokens < 0:
+            raise ValueError("headroom_tokens must be a non-negative integer")
         self.client = client
         self.budget = budget
+        self.headroom_tokens = headroom_tokens
+        self.model = getattr(client, "model", type(client).__module__ + "." + type(client).__qualname__)
 
     async def complete(self, prompt: str, *, max_output_tokens: int) -> ModelReply:
         for attempt in range(self.budget.retry_limit + 1):
@@ -210,7 +242,23 @@ class BudgetedLLMClient:
                 await wait_before_retry(error, self.budget)
 
     async def _attempt(self, prompt: str, *, max_output_tokens: int) -> ModelReply:
-        reservation = await self.budget.reserve_model_call(prompt, max_output_tokens)
+        try:
+            reservation = await self.budget.reserve_model_call(
+                prompt, max_output_tokens, headroom_tokens=self.headroom_tokens)
+        except ModelAllowanceExceeded as original:
+            # Only near the limit: count the real request, not bytes. Recheck
+            # under the lock because another branch may spend while we count.
+            if not self.budget.output_allowance_fits(max_output_tokens, self.headroom_tokens):
+                raise
+            try:
+                count = await asyncio.wait_for(self.count_input_tokens(prompt),
+                                               timeout=self.budget.remaining_seconds())
+            except (ModelResponseError, asyncio.TimeoutError):
+                raise original from None
+            reservation = await self.budget.reserve_model_call(
+                prompt, max_output_tokens, input_tokens=count, headroom_tokens=self.headroom_tokens)
+            if self.budget.tracer:
+                self.budget.tracer.event("model", "exact_input_reservation", count=count)
         try:
             reply = await asyncio.wait_for(
                 self.client.complete(prompt, max_output_tokens=max_output_tokens),
@@ -227,6 +275,13 @@ class BudgetedLLMClient:
         accounted = await self.budget.settle_model_call(reply, reservation)
         assert accounted is not None
         return accounted
+
+    async def count_input_tokens(self, prompt: str) -> int:
+        """Delegate through nested run/suite wrappers without a generation call."""
+        counter = getattr(self.client, "count_input_tokens", None)
+        if counter is None:
+            raise ModelResponseError("input token counting unavailable")
+        return await counter(prompt)
 
 
 class BudgetedSourceAdapter:

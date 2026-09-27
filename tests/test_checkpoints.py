@@ -6,13 +6,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.application import run_prepared_research
-from src.demo import OfflineDemoClient
+from src.application.service import run_prepared_research
+from src.testing.demo import OfflineDemoClient
 from src.models import SubmittedRunConfiguration, InputRequest
 from src.adapters import FrozenFixtureAdapter
 from src.persistence import CheckpointError, RunStore
-from src.preflight import prepare_run
-from src.budgets import BudgetExceeded
+from src.application.preflight import prepare_run
+from src.runtime.budgets import BudgetExceeded
 from test_application import FakeLLMClient
 from test_user_upload import _adapter, _submitted
 
@@ -48,8 +48,8 @@ class CheckpointTests(unittest.IsolatedAsyncioTestCase):
             result = await run_prepared_research(self.prepared, resumed, self.adapters,
                                                   checkpoint_dir=directory, resume=True)
             self.assertEqual(result.run_id, state["run_id"])
-            self.assertEqual(resumed.calls, [1000, 3000, 4000])
-            self.assertEqual(result.budget_usage.model_tokens, 3000)
+            self.assertEqual(resumed.calls, [1000, 3000, 4000, 2000])
+            self.assertEqual(result.budget_usage.model_tokens, 3600)
             self.assertGreater(result.budget_usage.reserved_model_tokens, 0)
             replay_client = InterruptingClient()
             replay = await run_prepared_research(self.prepared, replay_client, self.adapters,

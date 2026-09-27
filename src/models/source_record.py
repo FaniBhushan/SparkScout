@@ -41,6 +41,22 @@ class SourceChunk(ContractModel):
         return self
 
 
+class ExcerptReceipt(ContractModel):
+    """The search receipt that supplied an excerpt, retained for audit."""
+
+    query_id: Identifier
+    captured_at: datetime
+    url: HttpUrl | None = None
+
+
+class SourceExcerpt(ContractModel):
+    """Distinct public search text; additional receipts do not duplicate its text."""
+
+    text: NonEmptyText
+    content_hash: NonEmptyText
+    receipts: list[ExcerptReceipt] = Field(default_factory=list)
+
+
 class SourceRecord(ContractModel):
     schema_version: Literal["1.0"] = "1.0"
     source_id: Identifier
@@ -59,6 +75,9 @@ class SourceRecord(ContractModel):
     full_text: str | None = Field(default=None, exclude=True, repr=False)
     # Adapter passages travel to Library without inflating Scout's source prompt.
     evidence_chunks: list[SourceChunk] = Field(default_factory=list, exclude=True, repr=False)
+    # Public live-search excerpts survive checkpoint serialization. Upload text
+    # continues to use the separate, memory-only full_text/evidence_chunks fields.
+    excerpts: list[SourceExcerpt] = Field(default_factory=list, repr=False)
     license_access_note: NonEmptyText | None = None
     content_hash: NonEmptyText
     retrieval_status: RetrievalStatus

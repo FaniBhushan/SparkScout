@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.ui.cli import main
-from src.demo import OfflineDemoClient
+from src.testing.demo import OfflineDemoClient
 from src.llm.client import ModelReply
 from src.models import (
     BudgetSelection,
@@ -188,7 +188,7 @@ class CLIConfigurationTests(unittest.TestCase):
         result = json.loads(output.getvalue())
         self.assertEqual(result["prepared_run"]["submitted"]["original_prompt"], draft.original_prompt)
         self.assertEqual(result["prepared_run"]["field_origins"]["request.domain"], "deduced")
-        self.assertEqual(len(client.calls), 5)
+        self.assertEqual(len(client.calls), 6)
 
 
 if __name__ == "__main__":

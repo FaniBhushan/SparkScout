@@ -19,6 +19,9 @@ def _prompt_json(prompt: str, label: str) -> object:
 class OfflineDemoClient:
     """Exercise the real pipeline without claiming model-generated research quality."""
 
+    def __init__(self, max_candidates: int = 5) -> None:
+        self.max_candidates = max_candidates
+
     async def complete(self, prompt: str, *, max_output_tokens: int) -> ModelReply:
         if "bounded web searches for ScoutSpark's Scout worker" in prompt:
             search = _prompt_json(prompt, "Resolved search configuration:\n")
@@ -29,15 +32,24 @@ class OfflineDemoClient:
         elif "idea-discovery worker" in prompt:
             sources = _prompt_json(prompt, "Source records:\n")
             source = sources[0]
+            batch = _prompt_json(prompt, "Batch instructions:\n")
+            examples = [
+                ("Evidence explorer", "Students struggle to trace claims to source passages.", "An interactive citation browser", "Students"),
+                ("Permission inventory", "Researchers cannot compare dataset access conditions.", "A structured permission checklist", "Researchers"),
+                ("Annotation comparison", "Annotators disagree about ambiguous document labels.", "An annotation agreement report", "Annotators"),
+                ("Search coverage map", "Librarians need to identify gaps across research topics.", "A topic coverage visualization", "Librarians"),
+                ("Rubric sensitivity tool", "Supervisors cannot see how weight changes affect project ranking.", "A score sensitivity calculator", "Supervisors"),
+            ]
+            available = examples[:self.max_candidates][len(batch.get("existing_ideas", [])):]
             output = [{
                 "candidate_id": "candidate-01",
-                "title": "Evidence-grounded capstone prototype",
-                "problem_statement": "Students need a scoped prototype backed by inspectable sources.",
-                "target_users": ["Capstone students"],
-                "proposed_outcome": "A small prototype and evaluation report",
+                "title": title,
+                "problem_statement": problem,
+                "target_users": [users],
+                "proposed_outcome": outcome,
                 "why_it_matters": "The demo exercises source, retrieval, and citation checks.",
                 "evidence": [{"source_id": source["source_id"]}],
-            }]
+            } for title, problem, outcome, users in available[:batch["requested_count"]]]
         elif "evidence-based candidate assessor" in prompt:
             rubric = _prompt_json(prompt, "Evaluation configuration:\n")
             evidence = _prompt_json(prompt, "Retrieved evidence chunks:\n")
@@ -86,6 +98,15 @@ class OfflineDemoClient:
                     "references": [reference],
                 }],
             }
+        elif "independently verify factual support" in prompt:
+            data = _prompt_json(prompt, "Checks:\n")
+            passages = {item["chunk_id"]: item["text"] for item in data["passages"]}
+            output = {"checks": [
+                {"check_id": item["check_id"],
+                 "label": "proposed" if item["kind"] == "proposal_statement" else "supported",
+                 "rationale": "Synthetic demo verdict; not a model quality measurement.",
+                 "evidence_quotes": [passages[item["passage_ids"][0]]]}
+                for item in data["checks"]]}
         else:
             raise ValueError("offline demo does not support this prompt")
         return ModelReply(

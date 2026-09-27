@@ -8,10 +8,10 @@ import httpx
 from openai import APITimeoutError, RateLimitError
 
 from src.adapters.http_json import SourceRateLimitError
-from src.budgets import BudgetExceeded, BudgetedLLMClient, BudgetedSourceAdapter, RunBudget
+from src.runtime.budgets import BudgetExceeded, BudgetedLLMClient, BudgetedSourceAdapter, RunBudget
 from src.llm.client import ModelRateLimitError, ModelReply, ModelTimeoutError, OpenAITextClient
 from src.models import RunBudgetLimits
-from src.retry import retry_after_seconds
+from src.runtime.retry import retry_after_seconds
 
 
 class ReliabilityTests(unittest.IsolatedAsyncioTestCase):

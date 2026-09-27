@@ -13,7 +13,7 @@ from src.models import (
     SourcePolicy,
     SubmittedRunConfiguration,
 )
-from src.preflight import prepare_run
+from src.application.preflight import prepare_run
 
 
 class ReadyAdapter:

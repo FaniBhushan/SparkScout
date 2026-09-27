@@ -1,16 +1,16 @@
 {
   "schema_version": "1.0",
   "defaults": {
-    "max_elapsed_seconds": 300,
-    "max_model_tokens": 100000,
+    "max_elapsed_seconds": 600,
+    "max_model_tokens": 200000,
     "max_source_bytes": 2000000,
     "max_pdf_pages": 10,
     "max_estimated_cost_usd": null
   },
   "ceilings": {
-    "max_elapsed_seconds": 300,
-    "max_model_tokens": 100000,
-    "max_source_bytes": 10000000,
+    "max_elapsed_seconds": 600,
+    "max_model_tokens": 200000,
+    "max_source_bytes": 20000000,
     "max_pdf_pages": 20,
     "max_estimated_cost_usd": 5
   }

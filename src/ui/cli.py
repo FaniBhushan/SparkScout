@@ -8,14 +8,15 @@ import json
 import os
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 from src.adapters import build_available_adapters
 from src.adapters.user_upload import MAX_FILE_BYTES
-from src.application import run_prepared_research
-from src.demo import OfflineDemoClient
-from src.environment import load_local_environment
+from src.application.service import run_prepared_research
+from src.testing.demo import OfflineDemoClient
+from src.runtime.environment import load_local_environment
 from src.guardrails import emit_advisories, safe_error_message
-from src.interpretation import confirm_interpretation
+from src.application.interpretation import confirm_interpretation
 from src.llm.client import ModelPricing, OpenAITextClient
 from src.llm.request_interpreter import LLMRequestInterpreter
 from src.models import (
@@ -26,7 +27,8 @@ from src.models import (
     SearchConfiguration,
     SubmittedRunConfiguration,
 )
-from src.preflight import prepare_run
+from src.observability import RunTracer
+from src.application.preflight import prepare_run
 
 
 def _submitted_input(
@@ -76,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--offline-demo", action="store_true",
                         help="use a deterministic local model with frozen sources")
     parser.add_argument("--mode", choices=("sequential", "parallel"), default="sequential")
+    parser.add_argument("--trace-dir", type=Path, default=Path("runs"),
+                        help="directory for structured, text-free run traces")
     parser.add_argument("--checkpoint-dir", type=Path, help="opt-in local run checkpoint directory")
     parser.add_argument("--resume", action="store_true", help="reuse valid stages and preserve spent budget")
     parser.add_argument("--frozen-replay", action="store_true", help="resume using saved stages only")
@@ -170,11 +174,16 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("OPENAI_API_KEY is required for model calls")
         if client is None:
             client = OpenAITextClient(args.model, pricing=pricing)
-    result = asyncio.run(run_prepared_research(
-        prepared, client, adapters, mode=args.mode,
-        checkpoint_dir=args.checkpoint_dir, resume=args.resume or args.frozen_replay,
-        frozen=args.frozen_replay, retry_limit=int(args.retry_once),
-    ))
+    tracer = RunTracer(uuid4().hex, log_dir=args.trace_dir)
+    try:
+        result = asyncio.run(run_prepared_research(
+            prepared, client, adapters, mode=args.mode, tracer=tracer,
+            checkpoint_dir=args.checkpoint_dir, resume=args.resume or args.frozen_replay,
+            frozen=args.frozen_replay, retry_limit=int(args.retry_once),
+        ))
+    finally:
+        tracer.close()
+    print(f"Trace: {tracer.trace_path}", file=sys.stderr)
     print(result.model_dump_json(indent=2))
     return 0
 

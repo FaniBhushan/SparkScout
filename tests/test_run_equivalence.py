@@ -5,7 +5,7 @@ import unittest
 from dataclasses import replace
 
 from src.adapters import FrozenFixtureAdapter
-from src.application import run_research
+from src.application.service import run_research
 from src.models import InputRequest
 from test_application import FakeLLMClient, prompt_json
 
@@ -57,9 +57,10 @@ class EquivalenceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.status, "completed")
             self.assertEqual(result.finalist_candidate_ids, ["candidate-01", "candidate-03"])
             self.assertEqual([row.candidate_id for row in result.ranking],
-                             ["candidate-01", "candidate-03", "candidate-02"])
-            self.assertFalse(result.ranking[-1].gate_passed)
-            self.assertGreater(result.ranking[-1].total_score, result.ranking[0].total_score)
+                             ["candidate-02", "candidate-01", "candidate-03"])
+            self.assertEqual(result.score_finalist_candidate_ids, ["candidate-02", "candidate-01"])
+            self.assertFalse(result.ranking[0].gate_passed)
+            self.assertGreater(result.ranking[0].total_score, result.ranking[-1].total_score)
             sources = {source.source_id for source in result.source_manifest}
             chunks = {chunk.chunk_id: chunk.source_id for chunk in result.library.chunks}
             for proposal in result.final_proposals:

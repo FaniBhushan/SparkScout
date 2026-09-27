@@ -35,3 +35,19 @@ class CheckpointWriter:
             f"proposal:{candidate.candidate_id}", inputs, ProposalDraft,
             lambda: self.writer.draft(request, candidate, evaluation, sources, chunks),
         )
+
+
+class CheckpointVerifier:
+    """Reuse a completed audit only for the exact narrative, claims, and evidence."""
+
+    def __init__(self, verifier, store):
+        self.verifier, self.store = verifier, store
+
+    async def verify(self, request, narrative, claims, chunks, *, task_id=None):
+        from src.models.proposal_audit import ProposalAudit
+        inputs = {"request": request.model_dump(mode="json"), "narrative": narrative,
+                  "claims": [claim.model_dump(mode="json") for claim in claims], "chunks": chunks}
+        return await self.store.run_stage(
+            f"verification:{task_id}", inputs, ProposalAudit,
+            lambda: self.verifier.verify(request, narrative, claims, chunks, task_id=task_id),
+        )

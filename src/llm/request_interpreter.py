@@ -7,7 +7,7 @@ import re
 from collections.abc import Mapping
 
 from src.adapters.base import SourceAdapter
-from src.configuration import load_search_defaults, load_source_configuration
+from src.configuration.loader import load_search_defaults, load_source_configuration
 from src.evaluation.rubric import DEFAULT_RUBRIC_PATH
 from src.guardrails import check_privacy, emit_advisories, input_advisories
 from src.llm.client import LLMClient

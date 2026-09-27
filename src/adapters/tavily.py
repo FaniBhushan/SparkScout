@@ -9,11 +9,14 @@ from urllib.parse import urlparse
 
 from src.models.scout_query import SourceQuery
 from src.models.source_record import RetrievalStatus, SourceRecord
+from src.sources.merge import canonical_source_url
 
 from .http_json import SourceAdapterError, SourcePayloadError, request_json
 
 
 class TavilyAdapter:
+    """Search the web and retain only result metadata and permitted snippets."""
+
     provider_id = "tavily"
     endpoint = "https://api.tavily.com/search"
 
@@ -29,6 +32,7 @@ class TavilyAdapter:
         self.max_results = max_results
 
     async def search(self, query: SourceQuery) -> list[SourceRecord]:
+        """Return normalized web receipts without requesting full page content."""
         if query.provider_id != self.provider_id:
             raise ValueError(f"query provider must be {self.provider_id!r}")
         if "web_article" not in query.source_types:
@@ -77,6 +81,8 @@ class TavilyAdapter:
             if not include_snippet:
                 snippet = None
             parsed_date = _parse_date(item.get("published_date"))
+            # Canonicalize before assigning an ID so tracking links share identity.
+            url = canonical_source_url(url)
             source_id = "web-" + hashlib.sha256(url.encode("utf-8")).hexdigest()[:20]
             content_hash = hashlib.sha256(
                 f"{title}\n{snippet or ''}".encode("utf-8")

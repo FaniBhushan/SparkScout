@@ -32,6 +32,22 @@ def build_source_chunks(sources: list[SourceRecord]) -> list[SourceChunk]:
             }))
 
         text = source.full_text or source.abstract_or_snippet
+        for ordinal, excerpt in enumerate(source.excerpts):
+            if any(excerpt.text == chunk.text for chunk in source.evidence_chunks):
+                continue
+            digest = sha256(excerpt.text.encode("utf-8")).hexdigest()
+            chunk_id = f"{source.source_id}-excerpt-{digest}"
+            if chunk_id in seen_ids:
+                continue
+            seen_ids.add(chunk_id)
+            chunks.append(SourceChunk(
+                chunk_id=chunk_id, source_id=source.source_id,
+                ordinal=max((chunk.ordinal for chunk in source.evidence_chunks), default=-1) + ordinal + 1,
+                text=excerpt.text, content_hash=digest,
+                token_count=max(1, len(excerpt.text) // 4),
+            ))
+        if source.excerpts and any(text == excerpt.text for excerpt in source.excerpts):
+            continue
         if not text or any(text == chunk.text for chunk in source.evidence_chunks):
             continue
         # A captured passage may already use c0; never replace its citation ID.

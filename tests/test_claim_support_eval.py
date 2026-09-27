@@ -8,11 +8,11 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from evals.claim_support import (
+from evals.guardrails.claim_support_eval import (
     Prediction, assessment_label, collect_predictions, load_cases, main, score_predictions,
 )
 from src.models import CandidateAssessment
-from src.budgets import BudgetExceeded
+from src.runtime.budgets import BudgetExceeded
 
 
 def assessment(case, label):
@@ -109,7 +109,7 @@ class PaidEvaluationBudgetTests(unittest.TestCase):
     def test_insufficient_budget_blocks_first_model_call_and_closes_client(self):
         argv = ["eval", "--model", "gpt-4o-mini", "--max-cost-usd", "0.00000001",
                 "--input-rate", "0.15", "--output-rate", "0.6"]
-        with (patch("sys.argv", argv), patch("src.environment.load_local_environment"),
+        with (patch("sys.argv", argv), patch("src.runtime.environment.load_local_environment"),
               patch("src.llm.client.OpenAITextClient") as factory):
             factory.return_value.complete = AsyncMock()
             factory.return_value.sdk_client.close = AsyncMock()

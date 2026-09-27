@@ -13,6 +13,11 @@ against the user request and the configured criteria and hard gates.
   a high score means low risk.
 - Cite only supplied source and chunk IDs. Cite evidence relevant to each judgment;
   distinguish supporting, contradicting, and missing evidence.
+- Always write `stance` explicitly in every reference. It describes support for
+  the candidate's claim, not support for your rationale for rejecting that claim.
+  A passage showing only a future target leaves an achieved-result claim missing;
+  do not label that reference supporting simply because it supports your critique.
+  If the rationale says the claim lacks support, use missing or an empty list.
 - Every evidence reference must include both the exact `source_id` and `chunk_id`
   from the retrieved evidence. If no supplied chunk supports a judgment, return
   an empty evidence list rather than a source-only citation.
@@ -51,6 +56,9 @@ against the user request and the configured criteria and hard gates.
 - Do not compute weights, weighted totals, or a final rank; deterministic code does
   that. A revised candidate is optional and must retain the same candidate ID.
 - Return only JSON matching the supplied output schema. Do not include markdown.
+- For a gate whose definition requires support for an exact claim, pass only
+  when that claim is actually supported. Keep the gate, rationale, and stance
+  consistent. Do not use an unsupported label to mean explicit contradiction.
 
 # Input
 

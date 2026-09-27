@@ -35,8 +35,8 @@ class InputRequest(ContractModel):
     available_resources: DetailList = Field(default_factory=list)
     excluded_topics: DetailList = Field(default_factory=list)
     data_constraints: DetailList = Field(default_factory=list)
-    desired_candidate_count: PositiveInt = 12
-    finalist_count: PositiveInt = 3
+    desired_candidate_count: PositiveInt = 5
+    finalist_count: PositiveInt = 2
     source_policy: SourcePolicy = Field(default_factory=SourcePolicy)
 
     @model_validator(mode="after")

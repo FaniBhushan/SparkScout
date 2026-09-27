@@ -6,15 +6,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.adapters.user_upload import UserUploadAdapter
-from src.application import run_prepared_research
-from src.demo import OfflineDemoClient
+from src.application.service import run_prepared_research
+from src.testing.demo import OfflineDemoClient
 from src.models import (
     BudgetSelection,
     InputRequest,
     SearchConfiguration,
     SubmittedRunConfiguration,
 )
-from src.preflight import prepare_run
+from src.application.preflight import prepare_run
 from src.observability import RunTracer
 
 

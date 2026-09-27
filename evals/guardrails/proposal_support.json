@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "synthetic": true,
+  "cases": [
+    {"id": "narrative_tool_gap", "target": "narrative", "claim": "The proposed tool addresses the lack of real-time tools for beginner developers to check form accessibility.", "evidence": "Beginner developers report difficulty identifying keyboard navigation and screen-reader labeling problems. The guide describes testing form labels and validation messages.", "expected": "unsupported"},
+    {"id": "narrative_aggregation_gap", "target": "narrative", "claim": "Existing healthcare tools focus purely on individual datasets and lack cohesive synthesis capabilities.", "evidence": "Analysts report difficulty comparing service patterns using aggregate public data. The dataset contains de-identified aggregate wait-time and service-volume fields for educational analysis.", "expected": "unsupported"},
+    {"id": "narrative_proposed_feature", "target": "narrative", "claim": "Proposed differentiation to test: a guided form-label checklist for beginners. Whether this is better than existing tools is unknown.", "evidence": "Beginner developers report difficulty identifying keyboard navigation and screen-reader labeling problems.", "expected": "supported"},
+    {"id": "narrative_explicit_comparison", "target": "narrative", "claim": "The captured comparison found that tool A lacks keyboard-navigation checks.", "evidence": "In this comparison, tool A checked contrast but did not provide keyboard-navigation checks. Tool B included both.", "expected": "supported"},
+    {"id": "dependency_invented_labels", "target": "dependency", "claim": "crop images labeled with leaf disease categories", "evidence": "The public benchmark contains labeled crop images and permits non-commercial research. The label categories are not specified.", "expected": "unsupported"},
+    {"id": "dependency_known_fields", "target": "dependency", "claim": "aggregate wait-time fields for educational analysis", "evidence": "The sample contains de-identified aggregate wait-time and service-volume fields for educational analysis.", "expected": "supported"}
+  ]
+}

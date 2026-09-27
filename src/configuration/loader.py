@@ -20,7 +20,7 @@ from src.models import (
 )
 
 
-CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
+CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 
 
 def load_source_configuration(path: Path = CONFIG_DIR / "sources.json") -> SourceConfiguration:
@@ -95,6 +95,7 @@ def resolve_search_configuration(
         raise ValueError("domain and user source requirements conflict")
 
     def usable_provider(provider_id: str) -> ResolvedProvider | None:
+        """Resolve only providers that are enabled, ready, and policy-compatible."""
         definition = sources.providers[provider_id]
         if (
             not definition.enabled

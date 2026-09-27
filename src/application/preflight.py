@@ -6,7 +6,7 @@ import re
 from collections.abc import Mapping
 
 from src.adapters.base import SourceAdapter
-from src.configuration import (
+from src.configuration.loader import (
     load_search_defaults,
     load_budget_policy,
     load_source_configuration,

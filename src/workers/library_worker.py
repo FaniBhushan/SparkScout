@@ -12,9 +12,11 @@ from src.models import InputRequest, LibraryResult, ResolvedSearchConfiguration,
 from src.models.source_record import SourceRecord
 from src.observability import RunTracer
 from src.workers.source_filter import same_source_content, source_is_within_age_limit
+from src.sources.merge import capture_excerpts, is_live_source, merge_source_records
 from src.workers.query_limits import bound_query_plan
 from src.workers.upload_query import include_upload_query
 from src.workers.evidence import build_source_chunks
+from src.workers.source_coverage import recover_source_coverage
 
 
 class LibraryQueryPlanner(Protocol):
@@ -58,6 +60,7 @@ class LibraryWorker:
 
         sources: list[SourceRecord] = []
         seen: dict[str, SourceRecord] = {}
+        quarantined: set[str] = set()
         type_counts: Counter[str] = Counter()
         for query in queries:
             remaining = search.max_sources - len(sources)
@@ -93,6 +96,9 @@ class LibraryWorker:
                     raise ValueError("adapter returned an unrequested source type")
                 if not source_is_within_age_limit(source, search):
                     continue
+                source = capture_excerpts(source)
+                if source.source_id in quarantined:
+                    continue
                 previous = seen.get(source.source_id)
                 if previous is None:
                     if type_counts[source.source_type] >= search.max_records_by_type.get(
@@ -102,11 +108,31 @@ class LibraryWorker:
                     sources.append(source)
                     seen[source.source_id] = source
                     type_counts[source.source_type] += 1
+                elif is_live_source(source):
+                    try:
+                        merged = merge_source_records(previous, source)
+                    except ValueError:
+                        quarantined.add(source.source_id)
+                        sources.remove(previous)
+                        seen.pop(source.source_id)
+                        type_counts[previous.source_type] -= 1
+                        warnings.append(f"Library quarantined conflicting source {source.source_id}.")
+                        if self.tracer:
+                            self.tracer.event("library", "source_receipt_quarantined", count=1)
+                        continue
+                    sources[sources.index(previous)] = merged
+                    seen[source.source_id] = merged
                 elif not same_source_content(previous, source):
                     raise ValueError(f"conflicting records have source ID {source.source_id!r}")
             if self.tracer:
                 self.tracer.budget("library", "source_records", len(sources), search.max_sources)
 
+        sources, recovery_warnings = await recover_source_coverage(
+            request, search, sources, self.adapters, planned_queries=len(queries),
+            stage="library", tracer=self.tracer,
+            quarantined=quarantined,
+        )
+        warnings.extend(recovery_warnings)
         chunks = build_source_chunks(sources)
         warnings = list(warnings)
         if not chunks:

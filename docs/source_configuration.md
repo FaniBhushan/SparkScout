@@ -74,7 +74,7 @@ network access by itself. Synthetic fixtures remain test data and should not be
 presented as real evidence.
 
 Use `resolve_search_configuration(request, ready_adapters, preset_name="balanced")`
-from `src.configuration` before starting either research worker. Pass a mapping
+from `src.configuration.loader` before starting either research worker. Pass a mapping
 of initialized, usable adapters keyed by provider ID. The resolver keeps only
 enabled providers for the request's domain, applies the route and source policy,
 and rejects unavailable required source types. `requested_limits=SearchLimits(...)`
@@ -86,6 +86,6 @@ request override, bounded by `max_sources`. It also combines the preset's
 records older than the resulting cap; undated records remain usable because
 their age cannot be verified. The resolved `as_of_date` records the reference
 date. Required types from both the request and domain route are checked again
-against Library's usable sources at the join. `src/application.py` calls the
+against Library's usable sources at the join. `src/application/service.py` calls the
 resolver before workers start; the CLI can choose frozen fixtures or ready live
 adapters.

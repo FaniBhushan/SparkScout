@@ -32,8 +32,16 @@ def check_result(case: ResearchCase, result: OrchestrationResult) -> dict[str, b
         and item.gate_passed == all(gate.passed for gate in item.hard_gates)
         for item in evaluations
     )
-    ordered = sorted(evaluations, key=lambda item: (not item.gate_passed, -item.total_score, item.candidate_id))
-    finalists = [item.candidate_id for item in ordered if item.gate_passed][:case.expected_request.finalist_count]
+    ordered = sorted(evaluations, key=lambda item: (-item.total_score, item.candidate_id))
+    eligible = [item.candidate_id for item in ordered if item.gate_passed]
+    historical = {item.candidate_id for attempt in result.recovery_history
+                  for item in attempt.previous_evaluations if item.gate_passed}
+    failure_ids_valid = set(result.proposal_failures) <= set(eligible) | historical
+    finalists = [candidate_id for candidate_id in eligible if candidate_id not in result.proposal_failures]
+    finalists = finalists[:case.expected_request.finalist_count]
+    # A budget stop may leave eligible candidates undrafted. Yield is checked
+    # separately; selected IDs must still form the correct eligible prefix.
+    finalists = finalists[:len(result.finalist_candidate_ids)]
     target = case.expected.get("finalist_count", 0)
     # A requested count is a target; preserve usable partial outputs. Exact
     # attainment is reported separately, never manufactured with synthetic ideas.
@@ -51,8 +59,11 @@ def check_result(case: ResearchCase, result: OrchestrationResult) -> dict[str, b
         ) for ref in references) and all(proposal.citations for proposal in result.final_proposals))
             if result.final_proposals else None,
         "scoring_consistency": scores_valid if evaluations else None,
+        "proposal_verification": all(proposal.evidence_audit is not None
+                                      and proposal.evidence_audit.accepted
+                                      for proposal in result.final_proposals) if result.final_proposals else None,
         "ranking_consistency": [row.candidate_id for row in result.ranking] == [item.candidate_id for item in ordered]
-            and result.finalist_candidate_ids == finalists
+            and failure_ids_valid and result.finalist_candidate_ids == finalists
             and all(row.rank == index and row.total_score == item.total_score
                     and row.gate_passed == item.gate_passed
                     for index, (row, item) in enumerate(zip(result.ranking, ordered), 1)),

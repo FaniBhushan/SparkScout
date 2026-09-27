@@ -41,7 +41,7 @@ and an approved $1 cap. Offline validation alone checks structure, not quality.
 Reproduction (a new invocation incurs additional charges):
 
 ```sh
-.venv/bin/python -m evals.claim_support --model gpt-4o-mini --max-cost-usd 1 --input-rate 0.15 --output-rate 0.60
+.venv/bin/python -m evals.guardrails.claim_support_eval --model gpt-4o-mini --max-cost-usd 1 --input-rate 0.15 --output-rate 0.60
 ```
 
 Only derived results are recorded here, not raw paid-provider responses.

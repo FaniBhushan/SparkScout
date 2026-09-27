@@ -7,12 +7,12 @@ import unittest
 from pathlib import Path
 
 from src.adapters import FrozenFixtureAdapter
-from src.application import LLMOutputLimits, run_research
-from src.budgets import BudgetExceeded, BudgetedSourceAdapter, RunBudget
+from src.application.service import LLMOutputLimits, run_research
+from src.runtime.budgets import BudgetExceeded, BudgetedSourceAdapter, RunBudget
 from src.models import InputRequest, SourceQuery, SubmittedRunConfiguration
 from src.models.run_budget import RunBudgetLimits
 from src.persistence.identity import run_identity
-from src.preflight import prepare_run
+from src.application.preflight import prepare_run
 from src.workers.evidence import build_source_chunks
 from src.workers.source_filter import same_source_content
 from test_application import FakeLLMClient, prompt_json
@@ -63,7 +63,7 @@ class FrozenEvidenceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertLessEqual(sum(max(1, len(c["text"]) // 4) for c in sent.values()),
                                      result.retrieval_index.max_context_tokens)
                 self.assertTrue(all("evidence_chunks" not in s for s in client.scout_sources))
-                self.assertEqual(len(client.calls), 5)
+                self.assertEqual(len(client.calls), 6)
 
     async def test_metadata_only_does_not_release_passages_and_calls_are_isolated(self):
         adapter = FrozenFixtureAdapter("robotics_agriculture_01")

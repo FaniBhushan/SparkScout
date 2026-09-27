@@ -28,7 +28,9 @@ private temporary file, flushed, and atomically replaced, then the directory is
 flushed. This implementation targets local macOS/Linux filesystems.
 
 Checkpoints cover normalization, Scout, Library, the validated join, Critic,
-evaluation/ranking, individual proposal drafts, and finalization. Valid results
+evaluation/ranking, individual proposal drafts and verification audits, and
+finalization. Audits are reused only for the same narrative, claims, and evidence.
+Valid results
 are reused; missing or schema-invalid stage results rerun with their current
 dependencies. The retrieval index is rebuilt from Library chunks when needed.
 Checksums detect accidental corruption, not intentional tampering by someone
@@ -73,6 +75,14 @@ insufficient coverage and skips Critic. Blocking provider HTTP calls already in 
 worker thread may finish after cancellation, bounded by their socket timeout;
 their attempted request remains charged.
 
+Proposal backfilling reuses the existing ranked candidate pool before making new
+research calls. An empty result can trigger one recovery round with separate
+`recovery:library`, `recovery:scout`, `recovery:critic`, `recovery:evaluated`, and
+`recovery:finalized` checkpoints. Resume reuses these stages under the same input
+and code fingerprints and remaining shared budget. This application-level
+recovery is separate from transport retries. A recorded recovery outcome exposes
+prior gate judgments, draft failures, replacements, and any exhaustion reason.
+
 ## Verification
 
 `test_checkpoints.py` covers interrupted resume, replay without model calls,
@@ -83,3 +93,8 @@ sources and deterministic model responses, including a score tie and a failed
 hard gate. Only run IDs, timestamps, index IDs, mode, and elapsed time are omitted
 from comparison. Existing tests cover invalid citations and insufficient coverage.
 This establishes scheduling invariants on frozen inputs; live models can vary.
+
+Paid `python -m evals.end_to_end` runs also save checkpoints beside their output
+directory by default. Use `--checkpoint-root PATH --resume` with unchanged inputs
+and code to continue an interrupted evaluation. Choose a new report directory;
+do not overwrite an earlier measurement or reuse checkpoints across code changes.

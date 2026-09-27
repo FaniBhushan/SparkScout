@@ -30,7 +30,7 @@ def build_available_adapters(
 
     if sources is None:
         # Delay this import because configuration also references the adapter protocol.
-        from src.configuration import load_source_configuration
+        from src.configuration.loader import load_source_configuration
 
         catalog = load_source_configuration()
     else:

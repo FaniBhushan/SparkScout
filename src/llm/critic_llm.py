@@ -12,6 +12,7 @@ from src.models import (
     RetrievedChunk,
 )
 from src.observability import RunTracer
+from src.guardrails.evidence import factual_evidence_view
 
 
 class LLMCandidateJudge:
@@ -37,7 +38,7 @@ class LLMCandidateJudge:
             {
                 "source_id": hit.chunk.source_id,
                 "chunk_id": hit.chunk.chunk_id,
-                "text": hit.chunk.text,
+                "text": factual_evidence_view(hit.chunk.text),
             }
             for hit in evidence
         ]

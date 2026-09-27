@@ -19,8 +19,10 @@ from src.models import (
 from src.models.source_record import RetrievalStatus
 from src.observability import RunTracer
 from src.workers.source_filter import same_source_content, source_is_within_age_limit
+from src.sources.merge import capture_excerpts, is_live_source, merge_source_records
 from src.workers.query_limits import bound_query_plan
 from src.workers.upload_query import include_upload_query
+from src.workers.source_coverage import recover_source_coverage
 
 
 class ScoutQueryPlanner(Protocol):
@@ -85,6 +87,7 @@ class ScoutWorker:
 
         sources: list[SourceRecord] = []
         seen_sources: dict[str, SourceRecord] = {}
+        quarantined: set[str] = set()
         type_counts: Counter[str] = Counter()
         search_calls = 0
         for query in queries:
@@ -137,6 +140,9 @@ class ScoutWorker:
                     raise ValueError("adapter returned an unrequested source type")
                 if not source_is_within_age_limit(source, search):
                     continue
+                source = capture_excerpts(source)
+                if source.source_id in quarantined:
+                    continue
                 previous = seen_sources.get(source.source_id)
                 if previous is None:
                     if type_counts[source.source_type] >= search.max_records_by_type.get(
@@ -146,6 +152,20 @@ class ScoutWorker:
                     sources.append(source)
                     seen_sources[source.source_id] = source
                     type_counts[source.source_type] += 1
+                elif is_live_source(source):
+                    try:
+                        merged = merge_source_records(previous, source)
+                    except ValueError:
+                        quarantined.add(source.source_id)
+                        sources.remove(previous)
+                        seen_sources.pop(source.source_id)
+                        type_counts[previous.source_type] -= 1
+                        warnings.append(f"Scout quarantined conflicting source {source.source_id}.")
+                        if self.tracer:
+                            self.tracer.event("scout", "source_receipt_quarantined", count=1)
+                        continue
+                    sources[sources.index(previous)] = merged
+                    seen_sources[source.source_id] = merged
                 elif not same_source_content(previous, source):
                     raise ValueError(
                         f"conflicting records have the same source ID {source.source_id!r}"
@@ -153,6 +173,12 @@ class ScoutWorker:
             if self.tracer:
                 self.tracer.budget("scout", "source_records", len(sources), search.max_sources)
 
+        sources, recovery_warnings = await recover_source_coverage(
+            request, search, sources, self.adapters, planned_queries=len(queries),
+            stage="scout", tracer=self.tracer,
+            quarantined=quarantined,
+        )
+        warnings.extend(recovery_warnings)
         available_sources = [
             source
             for source in sources

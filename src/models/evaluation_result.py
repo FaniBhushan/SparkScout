@@ -40,6 +40,8 @@ class HardGateResult(ContractModel):
 
 
 class EvaluationResult(ContractModel):
+    """One candidate's criterion scores, hard-gate decisions, and evidence links."""
+
     schema_version: Literal["1.0"] = "1.0"
     evaluation_id: Identifier
     candidate_id: Identifier

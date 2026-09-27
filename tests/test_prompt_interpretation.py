@@ -6,12 +6,12 @@ import unittest
 
 from pydantic import ValidationError
 
-from src.interpretation import confirm_interpretation
+from src.application.interpretation import confirm_interpretation
 from src.guardrails import GuardrailWarning
 from src.llm.client import ModelReply
 from src.llm.request_interpreter import LLMRequestInterpreter
 from src.models import InterpretationReview
-from src.preflight import prepare_run
+from src.application.preflight import prepare_run
 
 
 class FakeLLM:

@@ -64,7 +64,7 @@ synthetic cases in `evals/guardrails/claim_support.json` cover supported,
 unsupported, and contradictory claims, including malicious evidence. Run:
 
 ```sh
-python -m evals.claim_support --validate-only
+python -m evals.guardrails.claim_support_eval --validate-only
 python -m unittest tests.test_guardrails tests.test_claim_support_eval -v
 ```
 

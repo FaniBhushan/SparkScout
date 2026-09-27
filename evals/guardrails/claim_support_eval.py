@@ -22,7 +22,7 @@ from src.models.common import ContractModel, Identifier, NonEmptyText
 from src.models.source_record import SourceChunk
 
 
-DATASET = Path(__file__).parent / "guardrails" / "claim_support.json"
+DATASET = Path(__file__).resolve().parent / "claim_support.json"
 Label = Literal["supported", "unsupported", "contradictory"]
 
 
@@ -31,6 +31,8 @@ class ClaimCase(ContractModel):
     claim: NonEmptyText
     evidence: NonEmptyText
     expected: Label
+    target: Literal["claim", "narrative", "dependency", "task_data_fit"] = "claim"
+    required_data: list[NonEmptyText] = Field(default_factory=list)
 
 
 class ClaimDataset(ContractModel):
@@ -94,7 +96,7 @@ def assessment_label(assessment: CandidateAssessment, case: ClaimCase) -> str:
     return label
 
 
-async def collect_predictions(dataset: ClaimDataset, judge) -> list[Prediction]:
+async def collect_predictions(dataset: ClaimDataset, judge, diagnostics=None) -> list[Prediction]:
     """Nine bounded component calls for the starter set; no search or generation."""
 
     rubric = EvaluationConfiguration(
@@ -122,8 +124,56 @@ async def collect_predictions(dataset: ClaimDataset, judge) -> list[Prediction]:
         try:
             assessment = await judge.assess(request, candidate, evidence, rubric)
             label = assessment_label(assessment, case)
-        except ValueError:
+            if diagnostics is not None:
+                diagnostics.append({"id": case.id, "assessment": assessment.model_dump(mode="json")})
+        except ValueError as error:
             label = "invalid"  # Malformed/blocked output is not excluded from the score.
+            if diagnostics is not None:
+                diagnostics.append({"id": case.id, "error_type": type(error).__name__})
+        predictions.append(Prediction(id=case.id, label=label))
+    return predictions
+
+
+async def collect_verifier_predictions(dataset: ClaimDataset, verifier, diagnostics=None) -> list[Prediction]:
+    """Measure the production verifier on exactly the same claim/evidence pairs."""
+    from src.models.common import ClaimEvidence
+    predictions = []
+    for case in dataset.cases:
+        chunk = {"source_id": case.id, "chunk_id": f"{case.id}-c0", "text": case.evidence}
+        claim = ClaimEvidence(claim=case.claim if case.target == "claim" else case.evidence, references=[{
+            "source_id": case.id, "chunk_id": chunk["chunk_id"],
+        }])
+        try:
+            narrative = {}
+            if case.target == "narrative":
+                narrative = {"proposal": {"gap_or_differentiation": case.claim}}
+            elif case.target == "dependency":
+                narrative = {"proposal": {"required_data": [case.claim]}}
+            elif case.target == "task_data_fit":
+                narrative = {"candidate": {"proposed_outcome": case.claim},
+                             "proposal": {"required_data": case.required_data}}
+            audit = await verifier.verify({}, narrative, [claim], [chunk], task_id=case.id)
+            if case.target == "narrative":
+                label = audit.narrative_checks["gap_or_differentiation"].label
+                label = "supported" if label == "proposed" else label
+            elif case.target == "dependency":
+                label = audit.dependencies[0].label
+            elif case.target == "task_data_fit":
+                label = audit.narrative_checks["data_task_fit"].label
+            else:
+                label = audit.claims[0].label
+            if diagnostics is not None:
+                diagnostics.append({"id": case.id, "audit": audit.model_dump(mode="json")})
+        except ValueError as error:
+            label = "invalid"
+            if diagnostics is not None:
+                diagnostics.append({"id": case.id, "error_type": type(error).__name__})
+                # Schema locations/types are useful without logging model text
+                # or Pydantic's potentially sensitive input_value payloads.
+                if hasattr(error, "errors"):
+                    diagnostics[-1]["validation_errors"] = [
+                        {"location": list(item["loc"]), "type": item["type"]}
+                        for item in error.errors()]
         predictions.append(Prediction(id=case.id, label=label))
     return predictions
 
@@ -135,27 +185,36 @@ def main() -> int:
     action.add_argument("--predictions", type=Path, help="offline JSON list of {id, label}")
     action.add_argument("--model", help="explicitly enable paid Critic calls for all cases")
     parser.add_argument("--dataset", type=Path, default=DATASET, help="frozen claim-support dataset")
+    parser.add_argument("--judge", choices=["critic", "verifier"], default="critic")
+    parser.add_argument("--output", type=Path, help="save a new JSON report, refusing overwrite")
     parser.add_argument("--max-cost-usd", type=float, help="required per-invocation estimated spending cap")
     parser.add_argument("--input-rate", type=float, help="USD per million input tokens")
     parser.add_argument("--output-rate", type=float, help="USD per million output tokens")
     args = parser.parse_args()
+    if args.output and args.output.exists():
+        parser.error("output already exists")
     if args.model and any(
         value is None or not isfinite(value) or value <= 0
         for value in (args.max_cost_usd, args.input_rate, args.output_rate)
     ):
         parser.error("paid evaluation requires positive finite --max-cost-usd, --input-rate and --output-rate")
     dataset = load_cases(args.dataset)
+    if args.judge != "verifier" and any(case.target != "claim" for case in dataset.cases):
+        parser.error("narrative/dependency cases require --judge verifier")
     budget = None
+    diagnostics = []
+    execution_error = None
     if args.validate_only:
         print(f"Validated {len(dataset.cases)} synthetic claim-support cases; no model calls.")
         return 0
     if args.predictions:
         predictions = TypeAdapter(list[Prediction]).validate_json(args.predictions.read_text())
     else:
-        from src.budgets import BudgetedLLMClient, RunBudget
-        from src.environment import load_local_environment
+        from src.runtime.budgets import BudgetedLLMClient, RunBudget
+        from src.runtime.environment import load_local_environment
         from src.llm.client import ModelPricing, OpenAITextClient
         from src.llm.critic_llm import LLMCandidateJudge
+        from src.llm.proposal_verifier import LLMProposalVerifier
         from src.models import RunBudgetLimits
 
         load_local_environment()
@@ -168,25 +227,47 @@ def main() -> int:
         # on transport failures instead; no automatic paid reruns.
         client = OpenAITextClient(args.model, pricing=pricing, max_retries=0)
         judge = LLMCandidateJudge(BudgetedLLMClient(client, budget), max_output_tokens=1000)
+        verifier = LLMProposalVerifier(BudgetedLLMClient(client, budget), max_output_tokens=1000)
 
         async def evaluate():
             try:
-                return await asyncio.wait_for(collect_predictions(dataset, judge), timeout=300)
+                operation = (collect_predictions(dataset, judge, diagnostics) if args.judge == "critic"
+                             else collect_verifier_predictions(dataset, verifier, diagnostics))
+                return await asyncio.wait_for(operation, timeout=300)
             finally:
                 await client.sdk_client.close()
 
-        predictions = asyncio.run(evaluate())
-    print(json.dumps({
+        try:
+            predictions = asyncio.run(evaluate())
+        except Exception as error:
+            # A failed evaluation still has billable/unknown usage. Preserve its
+            # receipt before returning an error; never score an unfinished suite.
+            execution_error = error
+            predictions = []
+    report = {
         "dataset_version": dataset.version,
         "dataset_sha256": hashlib.sha256(args.dataset.read_bytes()).hexdigest(),
         "dataset_path": str(args.dataset),
         "model": args.model,
+        "resolved_models": sorted(client.resolved_models) if args.model else [],
+        "judge": args.judge,
+        "prompt_sha256": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                          for path in sorted((DATASET.parents[2] / "src/prompts").glob("*.md"))},
         "budget_usage": budget.snapshot() if budget else None,
         "max_cost_usd": args.max_cost_usd,
         "pricing_per_million": {"input": args.input_rate, "output": args.output_rate},
         "predictions": [item.model_dump() for item in predictions],
-        "metrics": score_predictions(dataset, predictions),
-    }, indent=2))
+        "diagnostics": diagnostics,
+        "execution_error": safe_error_message(execution_error) if execution_error else None,
+        "metrics": score_predictions(dataset, predictions) if execution_error is None else None,
+    }
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with args.output.open("x", encoding="utf-8") as file:
+            json.dump(report, file, indent=2)
+    print(json.dumps(report, indent=2))
+    if execution_error is not None:
+        raise execution_error
     return 0
 
 

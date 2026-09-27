@@ -47,6 +47,7 @@ class LLMCandidateGenerator:
         self,
         request: InputRequest,
         sources: list[SourceRecord],
+        *, recovery_feedback: dict | None = None,
     ) -> list[CandidateIdea]:
         if not sources:
             return []
@@ -68,9 +69,22 @@ class LLMCandidateGenerator:
             )
             for source in sources
         ]
+        # One short captured passage can supply fields/permissions absent from
+        # a search summary. Bound it per source instead of sending whole documents.
+        for compact, source in zip(compact_sources, sources):
+            excerpts = [chunk for chunk in source.evidence_chunks if len(chunk.text) <= 1200]
+            if excerpts:
+                compact["evidence_excerpt"] = {
+                    "chunk_id": excerpts[0].chunk_id, "text": excerpts[0].text,
+                }
+                if len(excerpts) > 1:
+                    compact["additional_evidence_excerpt"] = {
+                        "chunk_id": excerpts[1].chunk_id, "text": excerpts[1].text,
+                    }
         candidates = await generate_candidate_batches(
             self.llm_client, request, compact_sources,
             max_output_tokens=self.max_output_tokens, tracer=self.tracer,
+            recovery_feedback=recovery_feedback,
         )
         # Synthetic ideas can influence subsequent batches, but never leave generation.
         return [item for item in candidates if item.origin != "synthetic"]
@@ -79,6 +93,7 @@ class LLMCandidateGenerator:
 async def generate_candidate_batches(
     client: LLMClient, request: InputRequest, sources: list[dict], *,
     max_output_tokens: int, tracer: RunTracer | None,
+    recovery_feedback: dict | None = None,
 ) -> list[CandidateIdea]:
     """Bound generation output and retain valid ideas when a later batch is malformed.
 
@@ -104,6 +119,7 @@ async def generate_candidate_batches(
             "REQUEST_JSON": request, "SOURCE_RECORDS_JSON": sources,
             "BATCH_JSON": {
                 "requested_count": requested_count,
+                "recovery_feedback": recovery_feedback,
                 "existing_ideas": [
                     {"target_users": item.target_users, "problem_statement": item.problem_statement,
                      "proposed_outcome": item.proposed_outcome, "origin": item.origin}
@@ -118,6 +134,11 @@ async def generate_candidate_batches(
                 task_id=f"batch-{batch_index + 1}", validation_retry_limit=0,
             ))
         except (ValidationError, ModelResponseError) as error:
+            from src.runtime.budgets import StageAllowanceExceeded
+            if isinstance(error, StageAllowanceExceeded):
+                if tracer:
+                    tracer.event("candidate_generation", "stage_allowance_reached", count=len(candidates))
+                break
             if isinstance(error, ModelResponseError) and error.reply is None:
                 raise
             if tracer:

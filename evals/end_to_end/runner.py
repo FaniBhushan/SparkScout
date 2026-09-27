@@ -3,13 +3,16 @@
 from time import monotonic
 
 from src.adapters import build_available_adapters
-from src.application import run_research
+from src.application.service import run_prepared_research
+from src.models import SubmittedRunConfiguration
+from src.application.preflight import prepare_run
 from src.guardrails import safe_error_message
 
 from .checks import check_result
 
 
-async def run_cases(cases, client, *, mode="sequential", pricing=None) -> list[dict]:
+async def run_cases(cases, client, *, mode="sequential", pricing=None,
+                    checkpoint_root=None, resume=False) -> list[dict]:
     """Use one supplied client so a caller can enforce a suite-wide budget."""
     records = []
     stopped = False
@@ -18,6 +21,9 @@ async def run_cases(cases, client, *, mode="sequential", pricing=None) -> list[d
             "case_id": case.case_id, "input_sha256": fingerprint,
             "checks": {}, "outcome": "skipped", "duration_seconds": 0,
             "result": None, "error": None,
+            "proposal_counts": {"requested": case.expected_request.finalist_count,
+                                "returned": 0, "target_met": False},
+            "expected_source_types": case.expected.get("required_source_types", []),
             "human_review": {key: case.expected.get(key, []) for key in (
                 "must_satisfy", "forbidden_outcomes", "relevant_source_ids")},
         }
@@ -28,8 +34,17 @@ async def run_cases(cases, client, *, mode="sequential", pricing=None) -> list[d
         start = monotonic()
         try:
             adapters = build_available_adapters(fixture_set=case.fixture_set)
-            result = await run_research(case.expected_request, client, adapters, mode=mode,
-                                        model_pricing=pricing)
+            prepared = prepare_run(SubmittedRunConfiguration(request=case.expected_request), adapters)
+            record["expected_source_types"] = list(prepared.search.required_source_types)
+            if checkpoint_root is None:
+                result = await run_prepared_research(prepared, client, adapters, mode=mode,
+                                                    model_pricing=pricing)
+            else:
+                directory = checkpoint_root / case.case_id
+                result = await run_prepared_research(
+                    prepared, client, adapters, mode=mode, model_pricing=pricing,
+                    checkpoint_dir=directory, resume=resume and (directory / "state.json").exists(),
+                )
             record["checks"] = check_result(case, result)
             record["proposal_counts"] = {
                 "requested": case.expected_request.finalist_count,

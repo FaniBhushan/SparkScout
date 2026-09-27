@@ -1,5 +1,10 @@
 # Three-domain evaluation — September 26, 2026
 
+This file preserves the earlier September 26 diagnostic history. The latest
+controlled sequential/parallel comparison, blind LLM-judge results, and live
+`web_article` demo attempt are recorded in
+[the September 27 evaluation](controlled_evaluation_2026-09-27.md).
+
 See the [consolidated issue report](issues-2026-09-26.md) for defect status,
 follow-up actions, and the related Critic baseline findings.
 
@@ -144,3 +149,12 @@ python -m evals.end_to_end --case robotics-agriculture-01 --mode sequential --mo
    scope changes; do not fill the requested count with unsupported duplicates.
 3. Repeat both modes on the same revised fixtures and limits, then review the
    generated proposals using the human rubric. Keep this failure baseline.
+# Current status — 27 September 2026
+
+The latest sequential run finished all three frozen cases but produced a proposal
+only for robotics (one caveated proposal); accessibility and medicine returned
+none. It used gpt-4o-mini, 146,047 model tokens, an estimated $0.038156, and
+303.18 seconds for the suite. This does not meet the three-domain quality-review
+goal. The final statement verifier and narrative-caveat policy were changed after
+this run. Earlier parallel reports used different code and cannot be compared as
+a controlled scheduling comparison. See [the reliability report](reliability-2026-09-27.md).

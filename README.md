@@ -9,8 +9,9 @@ Set `PYTHON_DOTENV_DISABLED=1` in CI/offline tests to skip local loading.
 ScoutSpark helps students find and assess capstone project ideas for a chosen
 domain, deadline, and set of resources. Scout discovers candidate ideas while
 Library independently gathers evidence. Critic evaluates each candidate against
-a configurable rubric, and a deterministic coordinator selects finalists that
-pass the hard gates.
+a configurable rubric. The UI displays the highest weighted-score ideas as
+finalists, including failed-gate reasons. Defaults are five ideas and two
+displayed finalists; counts and criterion weights are configurable.
 
 ## Current status
 
@@ -21,22 +22,43 @@ both can also select ready live sources. The UI has Simple and Advanced
 configuration, prompt drafting, a preview-before-run step, and optional local
 documents. This is an MVP, not a validated production service: broader quality
 evaluation remains open. Failure handling and opt-in CLI checkpoints/resume are
-implemented; see [checkpoint behavior](docs/checkpoints.md) and [TASKS.md](TASKS.md).
+implemented; see [checkpoint behavior](docs/checkpoints.md), the
+[issue and design decision log](docs/decision_log.md), and [TASKS.md](TASKS.md).
+
+Detailed proposals require passed gates and a separate evidence audit, with at most one correction. The
+temporary demo policy may retain explicitly marked narrative hypotheses after
+that correction; it does not waive factual citations, essential data/access, or
+budget checks. See [verification and demo policy](docs/orchestration.md).
+
+When a draft fails, the system tries the next gate-passing candidate. If no
+proposal survives, it makes one bounded recovery attempt using retained evidence,
+remaining search allowance, and up to three distinct replacement ideas. Recovery
+uses the same budget and preserves earlier rejection reasons; a valid proposal
+is not guaranteed when evidence or allowance is insufficient.
+
+Scorecards remain available when a detailed draft is withheld. Other ideas show
+their rank, criterion scores, weights, and reason for falling below the display
+cutoff. Submission measurements and their limits are collected in
+[the demo evaluation report](evals/demo_submission_2026-09-27.md).
 
 ## Repository layout
 
 - `src/models/` — validated request, source, candidate, evaluation, and proposal contracts.
 - `src/workers/`, `src/orchestration/`, `src/prompts/` — research workers, coordinator,
   and versioned model prompts.
-- `src/application.py`, `src/preflight.py` — reviewed run assembly and validation.
+- `src/application/` — run assembly, preflight validation, interpretation,
+  finalization, and recovery.
+- `src/runtime/`, `src/configuration/`, `src/sources/` — budgets and provider
+  failure handling, configuration loading, and shared source normalization.
+- `src/testing/` — offline demo helpers used by tests and evaluation runs.
 - `src/ui/` — CLI (`cli.py`) and Streamlit modules; `streamlit_app.py` is the
   thin Streamlit launch file.
-- `src/guardrails/` — input-size advisories and privacy checks shared by both interfaces.
+- `src/guardrails/` — input/privacy checks, evidence filtering, and bounded draft correction.
 - `src/adapters/`, `src/retrieval/` — frozen-fixture, Tavily, GitHub, and optional
   upload adapters plus a run-scoped local hybrid index.
 - `config/` — source registry, search and retrieval limits, and scoring weights.
-- `evals/` — development and held-out cases, synthetic frozen sources, and a
-  human-review rubric; no batch evaluation runner yet.
+- `evals/` — cases and frozen sources, `end_to_end/` and `live/` runners,
+  `analysis/` reports, `guardrails/` checks, and `validation/` tools.
 - `docs/` — configuration, scoring, tracing, and orchestration notes.
 
 ## Development checks
@@ -45,7 +67,7 @@ Use Python 3.10 or newer with Pydantic 2 installed. From the repository root:
 
 ```sh
 python -m unittest discover -s tests -v
-python evals/validate.py
+python -m evals.validation.validate
 ```
 
 The first command runs focused tests, and the second checks evaluation fixtures.
@@ -104,7 +126,7 @@ to compare orchestration. For your own structured `InputRequest` JSON, use
 ranking, complete final proposals where supported, and explicit coverage status.
 `partial` means fewer proposals were available than requested; users still receive
 those proposals. Synthetic exploration stays internal and is excluded from results.
-The shared `run_research()` function in `src/application.py` remains available.
+The shared `run_research()` function in `src/application/service.py` remains available.
 The [official OpenAI quickstart](https://developers.openai.com/api/docs/quickstart)
 explains API-key setup.
 

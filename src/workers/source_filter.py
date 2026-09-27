@@ -10,9 +10,9 @@ from src.models import ResolvedSearchConfiguration, SourceRecord
 def same_source_content(left: SourceRecord, right: SourceRecord) -> bool:
     """Repeated queries change receipt metadata, not the source's identity.
 
-    Keep the first receipt while still rejecting changes to content or other
-    source metadata. Compare full text and passages explicitly because
-    serialization omits them.
+    Live providers use the shared merge policy at call sites. This strict check
+    protects fixtures and memory-only uploads. Compare full text and passages
+    explicitly because serialization omits them.
     """
     excluded = {"query_id", "captured_at"}
     return (left.model_dump(exclude=excluded) == right.model_dump(exclude=excluded)

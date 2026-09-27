@@ -40,7 +40,12 @@ class LLMProposalWriter:
                 {
                     "REQUEST_JSON": request,
                     "CANDIDATE_JSON": candidate,
-                    "EVALUATION_JSON": evaluation,
+                    # Ranking and score tables are supplied by code, not rewritten
+                    # by the writer. Preserve gates and caveats without duplicating
+                    # ten scored rationales and their repeated citations.
+                    "EVALUATION_JSON": evaluation.model_dump(
+                        mode="json", include={"hard_gates", "uncertainty"}, exclude_none=True,
+                    ),
                     "SOURCES_JSON": sources,
                     "CHUNKS_JSON": chunks,
                 },

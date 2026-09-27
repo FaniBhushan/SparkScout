@@ -12,7 +12,7 @@ from src.models import (
     SourcePolicy,
     SubmittedRunConfiguration,
 )
-from src.preflight import prepare_run
+from src.application.preflight import prepare_run
 from src.ui.configuration import interface_catalog, submitted_from_controls
 from src.workers.source_filter import source_is_within_age_limit
 

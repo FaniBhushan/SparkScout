@@ -14,9 +14,12 @@ Simple configuration selects a preset with
 `load_evaluation_configuration("feasibility-first")`. Advanced configuration passes
 all criterion weights as `weights={...}`; partial maps and totals other than 100
 are rejected. The scoring formula is `score / 5 * weight`, summed to a 0–100 total.
-`delivery_risk` uses a high score for *low* risk. A failed hard gate blocks automatic
-recommendation even if its numeric score is high; final ranking belongs to the
-orchestrator. The UI still presents failed candidates and their caveats.
+`delivery_risk` uses a high score for *low* risk. Ranking is descending weighted
+score, with candidate ID breaking ties. The UI displays the top requested number
+(default two) even when a gate fails, and shows each failed gate's rationale.
+A failed gate still prevents a detailed, verified proposal. A score finalist is
+a comparison choice; feasibility and evidence may still require review.
+Remaining ideas have compact scorecards and an explicit rank-cutoff explanation.
 
 ## Evidence and timing gates
 

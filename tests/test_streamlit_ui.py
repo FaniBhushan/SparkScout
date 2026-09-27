@@ -77,6 +77,9 @@ class StreamlitUITests(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(len(app.error), 0)
         self.assertEqual(app.session_state["result"].status, "completed")
+        self.assertEqual(len(app.session_state["result"].score_finalist_candidate_ids), 2)
+        self.assertEqual(len(app.session_state["result"].ranking), 5)
+        self.assertEqual(sum("Not a finalist:" in item.value for item in app.caption), 3)
         self.assertEqual(app.session_state["result"].budget_usage.provider_calls,
                          {"frozen_fixture": 2})
 

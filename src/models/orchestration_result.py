@@ -10,12 +10,14 @@ from pydantic import Field, PositiveInt, model_validator
 from .common import ContractModel, EvidenceStance, Identifier, NonEmptyText
 from .critic_result import CriticResult
 from .final_proposal import FinalProposal
+from .evaluation_result import EvaluationResult
 from .library_result import LibraryResult
 from .run_configuration import PreparedRun
 from .run_budget import RunBudgetUsage
 from .scout_result import ScoutResult
 from .source_record import SourceRecord
 from .candidate_review import CandidateReviewDecision, assessment_fingerprint
+from .candidate_idea import CandidateIdea
 
 
 class RankedCandidate(ContractModel):
@@ -48,7 +50,21 @@ class RetrievalIndexInfo(ContractModel):
     retention: Literal["run_only"] = "run_only"
 
 
+class RecoveryRecord(ContractModel):
+    """Earlier assessments remain visible when recovery replaces a failed pool."""
+
+    previous_candidate_ids: list[Identifier] = Field(default_factory=list)
+    previous_candidates: list[CandidateIdea] = Field(default_factory=list)
+    previous_evaluations: list["EvaluationResult"] = Field(default_factory=list)
+    proposal_failures: dict[Identifier, NonEmptyText] = Field(default_factory=dict)
+    replacement_candidate_ids: list[Identifier] = Field(default_factory=list)
+    outcome: Literal["started", "completed", "exhausted", "failed"] = "started"
+    reason: str | None = None
+
+
 class OrchestrationResult(ContractModel):
+    requested_finalist_count: PositiveInt = 2
+    budget_exhausted: bool = False
     schema_version: Literal["1.0"] = "1.0"
     run_id: Identifier
     mode: Literal["sequential", "parallel"]
@@ -60,12 +76,35 @@ class OrchestrationResult(ContractModel):
     prepared_run: PreparedRun | None = None
     budget_usage: RunBudgetUsage | None = None
     final_proposals: list[FinalProposal] = Field(default_factory=list)
+    proposal_failures: dict[Identifier, NonEmptyText] = Field(default_factory=dict)
+    recovery_history: list[RecoveryRecord] = Field(default_factory=list)
     source_manifest: list[SourceRecord] = Field(default_factory=list)
     ranking: list[RankedCandidate] = Field(default_factory=list)
     finalist_candidate_ids: list[Identifier] = Field(default_factory=list)
     review_decisions: list[CandidateReviewDecision] = Field(default_factory=list)
     warnings: list[NonEmptyText] = Field(default_factory=list)
     completed_at: datetime
+
+    @property
+    def score_ranking(self) -> list[RankedCandidate]:
+        """Include earlier assessed ideas when a recovery round replaced the pool."""
+        rows = {}
+        for attempt in self.recovery_history:
+            for item in attempt.previous_evaluations:
+                rows[item.candidate_id] = RankedCandidate(
+                    candidate_id=item.candidate_id, evaluation_id=item.evaluation_id,
+                    rank=1, total_score=item.total_score, gate_passed=item.gate_passed,
+                )
+        rows.update({row.candidate_id: row for row in self.ranking})
+        ordered = sorted(rows.values(), key=lambda row: (-row.total_score, row.candidate_id))
+        return [row.model_copy(update={"rank": rank}) for rank, row in enumerate(ordered, 1)]
+
+    @property
+    def score_finalist_candidate_ids(self) -> list[str]:
+        """Score selections remain visible even when a detailed draft is withheld."""
+        count = (self.prepared_run.request.finalist_count if self.prepared_run
+                 else self.requested_finalist_count)
+        return [row.candidate_id for row in self.score_ranking[:count]]
 
     @model_validator(mode="after")
     def validate_review_decisions(self) -> "OrchestrationResult":
@@ -110,10 +149,22 @@ class OrchestrationResult(ContractModel):
         source_ids = {source.source_id for source in self.source_manifest}
         chunk_sources = {chunk.chunk_id: chunk.source_id for chunk in self.library.chunks}
         for proposal in self.final_proposals:
+            if proposal.evidence_audit is not None:
+                audit = proposal.evidence_audit
+                if (not audit.accepted or sorted(item.claim_index for item in audit.claims)
+                        != list(range(len(proposal.citations)))):
+                    raise ValueError("proposal evidence audit must pass for every citation claim")
+                if audit.caveated_fields:
+                    from src.guardrails.proposal_policy import HYPOTHESIS_PREFIX
+                    if any(not getattr(proposal, field).startswith(HYPOTHESIS_PREFIX)
+                           for field in audit.caveated_fields):
+                        raise ValueError("provisional narrative must be explicitly qualified")
             row = rows.get(proposal.candidate_id)
             evaluation = evaluations.get(proposal.candidate_id)
             if row is None or evaluation is None:
                 raise ValueError("final proposal has no selected ranking and evaluation")
+            if not evaluation.gate_passed or proposal.candidate_id in self.proposal_failures:
+                raise ValueError("failed candidates cannot appear as final proposals")
             if proposal.rank != row.rank or abs(proposal.total_score - row.total_score) > 0.01:
                 raise ValueError("final proposal rank and score must match the ranking")
             if proposal.criterion_scores != evaluation.criteria:

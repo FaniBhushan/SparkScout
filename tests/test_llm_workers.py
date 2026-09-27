@@ -91,8 +91,10 @@ class LLMWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(queries[0].query_id, "scout-q-01")
         prompt, limit = client.calls[0]
         self.assertEqual(limit, 500)
-        self.assertIn('"domain": "AI engineering"', prompt)
-        self.assertIn('"provider_id": "fixture"', prompt)
+        from test_application import prompt_json
+        self.assertEqual(prompt_json(prompt, "Request:\n")["domain"], "AI engineering")
+        search = prompt_json(prompt, "Resolved search configuration:\n")
+        self.assertEqual(search["providers"][0]["provider_id"], "fixture")
 
     async def test_library_planner_uses_independent_prompt(self) -> None:
         client = FakeLLMClient(json.dumps([{

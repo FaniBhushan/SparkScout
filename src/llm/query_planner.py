@@ -35,6 +35,7 @@ class _LLMQueryPlanner(Generic[QueryT]):
         request: InputRequest,
         search: ResolvedSearchConfiguration,
     ) -> list[QueryT]:
+        """Use the branch-specific prompt with the same typed request context."""
         return cast(
             list[QueryT],
             await call_prompt(
