@@ -25,7 +25,9 @@ def source_is_within_age_limit(
 ) -> bool:
     """Keep undated records, but reject dated records older than the policy."""
 
-    if search.language and source.language != search.language:
+    # A provider may not report language for every result. Keep unknown-language
+    # records with the rest of the metadata; only reject a known mismatch.
+    if search.language and source.language and source.language != search.language:
         return False
 
     max_age = search.max_age_days_by_type.get(source.source_type)

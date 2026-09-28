@@ -41,7 +41,10 @@ class _ConsoleFormatter(logging.Formatter):
                 f"cost_usd={data.get('estimated_cost_usd', 'unconfigured')}"
             )
         details = [event]
-        for key in ("provider_id", "query_id", "count", "duration_ms", "error_type"):
+        for key in (
+            "provider_id", "query_id", "count", "duration_ms", "error_type", "failure_type",
+            "schema_issues",
+        ):
             if key in data:
                 details.append(f"{key}={data[key]}")
         return f"{prefix} {' '.join(details)}"
@@ -58,27 +61,38 @@ class RunTracer:
         console: bool = True,
         on_record: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", run_id):
-            raise ValueError("run_id must be a safe file name")
-
         self.run_id = run_id
         self.on_record = on_record
-        self.trace_path = Path(log_dir) / run_id / "trace.jsonl"
-        self.trace_path.parent.mkdir(parents=True, exist_ok=True)
+        self.trace_path: Path | None = None
         self._active_span: ContextVar[str | None] = ContextVar(
-            f"scoutspark_span_{run_id}", default=None
+            f"scoutspark_span_{id(self)}", default=None
         )
         self._logger = logging.getLogger(f"scoutspark.trace.{run_id}.{id(self)}")
         self._logger.setLevel(logging.INFO)
         self._logger.propagate = False
-        self._file_handler = logging.FileHandler(self.trace_path, encoding="utf-8")
-        self._file_handler.setFormatter(logging.Formatter("%(message)s"))
-        self._logger.addHandler(self._file_handler)
+        self._file_handler: logging.Handler | None = None
         self._console_handler: logging.Handler | None = None
+
+        # Tracing is optional. A bad path, permissions issue, or full disk must
+        # not prevent a research run from starting.
+        try:
+            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", run_id):
+                self.trace_path = Path(log_dir) / run_id / "trace.jsonl"
+                self.trace_path.parent.mkdir(parents=True, exist_ok=True)
+                self._file_handler = logging.FileHandler(self.trace_path, encoding="utf-8")
+                self._file_handler.setFormatter(logging.Formatter("%(message)s"))
+                self._logger.addHandler(self._file_handler)
+        except Exception:
+            self.trace_path = None
+            self._file_handler = None
+
         if console:
-            self._console_handler = logging.StreamHandler()
-            self._console_handler.setFormatter(_ConsoleFormatter())
-            self._logger.addHandler(self._console_handler)
+            try:
+                self._console_handler = logging.StreamHandler()
+                self._console_handler.setFormatter(_ConsoleFormatter())
+                self._logger.addHandler(self._console_handler)
+            except Exception:
+                self._console_handler = None
 
     def event(
         self,
@@ -89,6 +103,8 @@ class RunTracer:
         provider_id: str | None = None,
         query_id: str | None = None,
         count: int | None = None,
+        failure_type: str | None = None,
+        schema_issues: list[str] | None = None,
     ) -> None:
         """Record an event using bounded metadata only."""
 
@@ -99,6 +115,8 @@ class RunTracer:
             provider_id=provider_id,
             query_id=query_id,
             count=count,
+            failure_type=failure_type,
+            schema_issues=schema_issues[:5] if schema_issues else None,
             span_id=self._active_span.get(),
         )
 
@@ -113,8 +131,11 @@ class RunTracer:
     ) -> None:
         """Record current use against a configured limit."""
 
-        if not all(math.isfinite(value) and value >= 0 for value in (used, limit)):
-            raise ValueError("budget used and limit must be finite, non-negative numbers")
+        try:
+            if not all(math.isfinite(value) and value >= 0 for value in (used, limit)):
+                return
+        except (TypeError, ValueError):
+            return
         self._write(
             stage=stage,
             event="budget",
@@ -198,29 +219,33 @@ class RunTracer:
             self._active_span.reset(token)
 
     def close(self) -> None:
-        """Flush and close the run's trace file."""
+        """Best-effort cleanup; logging shutdown cannot fail the research run."""
 
-        self._logger.removeHandler(self._file_handler)
-        self._file_handler.close()
-        if self._console_handler is not None:
-            self._logger.removeHandler(self._console_handler)
-            self._console_handler.close()
+        for handler in (self._file_handler, self._console_handler):
+            if handler is None:
+                continue
+            try:
+                self._logger.removeHandler(handler)
+                handler.close()
+            except Exception:
+                continue
 
     def _write(self, *, stage: str, event: str, **fields: object) -> None:
-        record = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "run_id": self.run_id,
-            "stage": stage,
-            "event": event,
-        }
-        record.update({key: value for key, value in fields.items() if value is not None})
-        level = logging.ERROR if event == "error" else logging.INFO
-        if event == "budget" and record.get("exceeded"):
-            level = logging.WARNING
-        self._logger.log(level, json.dumps(record, allow_nan=False, separators=(",", ":")))
-        if self.on_record is not None:
-            try:
+        """Emit one bounded record without allowing telemetry to affect work."""
+        try:
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "run_id": self.run_id,
+                "stage": stage,
+                "event": event,
+            }
+            record.update({key: value for key, value in fields.items() if value is not None})
+            level = logging.ERROR if event == "error" else logging.INFO
+            if event == "budget" and record.get("exceeded"):
+                level = logging.WARNING
+            self._logger.log(level, json.dumps(record, allow_nan=False, separators=(",", ":")))
+            if self.on_record is not None:
                 self.on_record(record)
-            except Exception:
-                # A presentation subscriber must not stop or alter research.
-                logging.getLogger(__name__).warning("trace progress callback failed")
+        except Exception:
+            # File, console, serialization, and callback failures are telemetry-only.
+            return

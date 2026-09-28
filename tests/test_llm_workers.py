@@ -158,6 +158,70 @@ class LLMWorkerTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(len(client.calls), 2)
 
+    async def test_query_envelopes_work_in_both_planners_without_paid_retry(self) -> None:
+        query = {
+            "query_id": "q-01", "provider_id": "fixture", "text": "dataset fit",
+            "source_types": ["dataset"], "content_types": ["text"], "max_results": 2,
+        }
+        for planner in (LLMScoutQueryPlanner, LLMLibraryQueryPlanner):
+            for key in ("items", "queries"):
+                with self.subTest(planner=planner.__name__, key=key):
+                    client = FakeLLMClient(json.dumps({key: [query]}))
+                    result = await planner(client, max_output_tokens=500).plan(
+                        self.request, self.search
+                    )
+                    self.assertEqual(result[0].text, query["text"])
+                    self.assertEqual(len(client.calls), 1)
+
+    def test_query_prompt_schema_matches_provider_json_object_mode(self) -> None:
+        from src.prompts import render_prompt, parse_model_output
+
+        for name in ("scout_query_planner", "library_query_planner"):
+            prompt = render_prompt(name, REQUEST_JSON=self.request, SEARCH_CONFIG_JSON=self.search)
+            schema = json.loads(prompt.split("# Output schema\n\n")[1])
+            self.assertEqual(schema["type"], "object")
+            self.assertEqual(schema["required"], ["queries"])
+            self.assertEqual(schema["properties"]["queries"]["type"], "array")
+            self.assertIn("$defs", schema)
+            self.assertEqual(parse_model_output(name, {"queries": []}), [])
+
+    async def test_query_repair_preserves_validation_and_rejects_ambiguity(self) -> None:
+        query = {
+            "query_id": "q-01", "provider_id": "fixture", "text": "dataset fit",
+            "source_types": ["dataset"], "content_types": ["text"], "max_results": 2,
+        }
+        invalid_outputs = [
+            {"items": [query], "extra": "must not be discarded"},
+            {"queries": [{**query, "unknown_field": "invalid"}]},
+            {"items": [{**query, "max_results": "2"}]},
+            {"queries": [{key: value for key, value in query.items() if key != "text"}]},
+            {"items": query},
+        ]
+        for planner in (LLMScoutQueryPlanner, LLMLibraryQueryPlanner):
+            for output in invalid_outputs:
+                with self.subTest(planner=planner.__name__, output=output):
+                    client = FakeLLMClient(json.dumps(output))
+                    with self.assertRaises(ValidationError):
+                        await planner(client, max_output_tokens=500).plan(self.request, self.search)
+                    self.assertEqual(len(client.calls), 2)
+
+    def test_wrapped_validation_error_has_actionable_message_without_model_output(self) -> None:
+        from src.guardrails import safe_error_message
+        from src.orchestration.coordinator import OrchestrationError
+        from src.prompts import parse_model_output
+
+        try:
+            parse_model_output("scout_query_planner", '{"unexpected": "private model text"}')
+        except ValidationError as error:
+            try:
+                raise OrchestrationError("scout", error) from error
+            except OrchestrationError as wrapped:
+                message = safe_error_message(wrapped)
+        self.assertIn("scout stage", message)
+        self.assertIn("Start research", message)
+        self.assertNotIn("private model text", message)
+        self.assertNotIn("input_value", message)
+
     async def test_schema_validation_retries_once_and_records_each_usage(self) -> None:
         valid = json.dumps([{
             "query_id": "scout-q-01", "provider_id": "fixture", "text": "dataset fit",

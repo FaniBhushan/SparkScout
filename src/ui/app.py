@@ -25,13 +25,30 @@ from .configuration import interface_catalog, submitted_from_controls
 from .controls import _advanced_controls, _prompt_text, _simple_controls
 from .state import _accepted_paths, _acknowledged_issues, _fingerprint, _initialize, _reset_search
 from .views import _result_view, _show_draft
+from .run_history import has_saved_run, list_saved_runs, load_run_result, save_run_result
 
 
 def main() -> None:
     st.set_page_config(page_title="ScoutSpark", layout="wide")
     _initialize()
+    current_result = st.session_state.result
+    if current_result is not None and not has_saved_run(current_result.run_id):
+        try:
+            save_run_result(current_result)
+            st.session_state.run_history_notice = (
+                "Your current result has been saved locally. It will remain available "
+                "from run history after starting another search."
+            )
+        except (OSError, ValueError):
+            st.session_state.run_history_notice = (
+                "This result could not be saved locally. Download its run JSON before "
+                "starting another search."
+            )
     if st.session_state.ui_page == "results" and st.session_state.result is not None:
         st.title("Research results")
+        if st.session_state.run_history_notice:
+            st.info(st.session_state.run_history_notice)
+            st.session_state.run_history_notice = None
         back_col, new_col, _ = st.columns([1, 1, 5])
         if back_col.button("← Back to input"):
             st.session_state.ui_page = "configure"
@@ -42,8 +59,17 @@ def main() -> None:
         _result_view(st.session_state.result)
         return
 
-    st.title("ScoutSpark")
-    st.caption("Review the source plan and scoring weights before starting research.")
+    title_col, history_col = st.columns([5, 1])
+    with title_col:
+        st.title("ScoutSpark")
+        st.caption("Review the source plan and scoring weights before starting research.")
+    with history_col:
+        _show_saved_run_history()
+    if st.session_state.result is not None:
+        st.info("Your previous run is saved in this session.")
+        if st.button("Return to previous results"):
+            st.session_state.ui_page = "results"
+            st.rerun()
 
     data_mode = st.radio("Data mode", ["Offline demo", "Live sources"], horizontal=True,
                          key="data_mode")
@@ -73,6 +99,11 @@ def main() -> None:
         fixtures = sorted(path.name for path in Path(DEFAULT_FIXTURE_ROOT).iterdir() if path.is_dir())
         fixture_set = st.selectbox("Synthetic fixture set", fixtures)
         st.info("Fully offline demo: frozen synthetic sources and deterministic model responses. Not real-world evidence.")
+        if st.session_state.get("request_prompt", "").strip():
+            st.caption(
+                "Offline demo does not interpret the free-text prompt. It uses the structured "
+                "fields above and the selected synthetic fixture."
+            )
     else:
         uploads = st.file_uploader("Your documents (.txt, .md, .pdf; up to 5)",
                                    type=["txt", "md", "pdf"], accept_multiple_files=True,
@@ -206,8 +237,11 @@ def main() -> None:
             submitted = submitted_from_controls(
                 st.session_state.ui_values,
                 st.session_state.ui_explicit,
-                prompt=prompt,
-                draft=draft if draft and draft.original_prompt == prompt else None,
+                # Offline mode has no LLM interpreter. Its structured controls
+                # are the request; don't block the demo on free-text drafting.
+                prompt=prompt if data_mode == "Live sources" else "",
+                draft=(draft if data_mode == "Live sources" and draft
+                       and draft.original_prompt == prompt else None),
                 accepted_paths=_accepted_paths(),
                 acknowledged_issues=_acknowledged_issues(),
             )
@@ -297,13 +331,52 @@ def main() -> None:
                 ))
                 st.session_state.result = result
                 st.session_state.ui_page = "results"
+                try:
+                    save_run_result(result)
+                    st.session_state.run_history_notice = (
+                        "This result is saved locally on this computer and can be reopened "
+                        "from run history. Saved run data is excluded from Git."
+                    )
+                except (OSError, ValueError):
+                    # Persistence is a convenience; a disk problem must not turn a
+                    # successful research run into a failed run.
+                    st.session_state.run_history_notice = (
+                        "Research completed, but this result could not be saved locally. "
+                        "Download the run JSON to keep a copy."
+                    )
                 progress.progress(100, text="Run complete")
                 status.update(label="Run complete", state="complete")
             except Exception as error:
                 status.update(label="Run failed", state="error")
-                st.session_state.result = None
                 st.error(safe_error_message(error))
             finally:
                 tracer.close()
     if st.session_state.ui_page == "results":
         st.rerun()
+
+
+def _show_saved_run_history() -> None:
+    """Offer reopening local result snapshots without rerunning research."""
+
+    saved_runs = list_saved_runs()
+    if not saved_runs:
+        return
+    run_by_id = {item.run_id: item for item in saved_runs}
+    with st.popover("Saved runs", icon=":material/history:"):
+        st.caption("Reopen a local result without repeating searches or model calls.")
+        selected_id = st.selectbox(
+            "Choose a saved run",
+            options=list(run_by_id),
+            format_func=lambda run_id: (
+                f"{run_by_id[run_id].saved_at:%Y-%m-%d %H:%M} · {run_id[:8]}"
+            ),
+            key="saved_run_picker",
+        )
+        if st.button("Open saved run"):
+            try:
+                st.session_state.result = load_run_result(selected_id)
+            except (OSError, ValueError) as error:
+                st.error(safe_error_message(error))
+                return
+            st.session_state.ui_page = "results"
+            st.rerun()

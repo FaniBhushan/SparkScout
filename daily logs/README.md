@@ -8,6 +8,9 @@ then the implementation and verification details in that day's entry.
 | 2026-09-23 | Project contracts, worker boundaries, source and evaluation foundations | [23 September](2026-09-23.md) |
 | 2026-09-24 | Research-run foundation and first frozen-fixture path | [24 September](2026-09-24.md) |
 | 2026-09-25 | Complete MVP run path with hybrid retrieval and final proposals | [25 September](2026-09-25.md) |
+| 2026-09-26 | Reliability findings and evidence-flow follow-up | [26 September](2026-09-26.md) |
+| 2026-09-27 | Recovery, evaluation, demo behavior, and submission materials | [27 September](2026-09-27.md) |
+| 2026-09-28 | UI resilience, run history, and demo guidance | [28 September](2026-09-28.md) |
 
 The 23 September entry is reconstructed from the user-confirmed work date and
 the foundation recorded in the initial commit early on 24 September. That

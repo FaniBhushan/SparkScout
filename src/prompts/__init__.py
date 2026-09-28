@@ -63,6 +63,26 @@ def render_prompt(name: PromptName, **context: object) -> str:
 
     values = dict(context)
     values["OUTPUT_SCHEMA"] = output_type.json_schema()
+    if name in {"scout_query_planner", "library_query_planner"}:
+        # The provider uses JSON-object mode. Describe an object envelope while
+        # keeping the internal planner contract a strictly validated query list.
+        query_schema = values["OUTPUT_SCHEMA"]
+        definitions = query_schema.pop("$defs", {})
+        values["OUTPUT_SCHEMA"] = {
+            "type": "object", "properties": {"queries": query_schema},
+            "required": ["queries"], "additionalProperties": False,
+            "$defs": definitions,
+        }
+    elif name == "scout_candidate_generator":
+        # JSON-object mode requires an object, while the worker contract is a list.
+        # Make the transport envelope explicit and unwrap it before validation.
+        candidate_schema = values["OUTPUT_SCHEMA"]
+        definitions = candidate_schema.pop("$defs", {})
+        values["OUTPUT_SCHEMA"] = {
+            "type": "object", "properties": {"candidates": candidate_schema},
+            "required": ["candidates"], "additionalProperties": False,
+            "$defs": definitions,
+        }
     template = (PROMPT_DIR / filename).read_text(encoding="utf-8")
     placeholders = set(_PLACEHOLDER.findall(template))
     missing = placeholders - values.keys()
@@ -94,14 +114,81 @@ def parse_model_output(name: PromptName, output: str | bytes | object) -> object
         raise ValueError(f"unknown prompt template: {name!r}") from None
     if isinstance(output, (str, bytes)):
         output = _strip_json_markdown_fence(output)
+        if name in {"scout_query_planner", "library_query_planner"}:
+            repaired = repair_query_envelope(output)
+            if repaired is not None:
+                output = repaired
         try:
             return output_type.validate_json(output, strict=True)
-        except ValidationError:
+        except ValidationError as error:
             repaired = repair_known_candidate_field(output) if name == "scout_candidate_generator" else None
+            if name == "scout_candidate_generator":
+                candidate_json = repaired if repaired is not None else output
+                partial = _parse_valid_candidate_items(candidate_json)
+                if partial:
+                    return partial
             if repaired is None:
                 raise
-            return output_type.validate_json(repaired, strict=True)
+            try:
+                return output_type.validate_json(repaired, strict=True)
+            except ValidationError:
+                raise error
+    if isinstance(output, dict):
+        if name in {"scout_query_planner", "library_query_planner"}:
+            repaired = repair_query_envelope(json.dumps(output))
+            if repaired is not None:
+                return output_type.validate_json(repaired, strict=True)
+        if (name == "scout_candidate_generator" and set(output) == {"candidates"}
+                and isinstance(output["candidates"], list)):
+            try:
+                return output_type.validate_python(output["candidates"], strict=True)
+            except ValidationError:
+                partial = _parse_valid_candidate_items(json.dumps(output["candidates"]))
+                if partial:
+                    return partial
+                raise
     return output_type.validate_python(output, strict=True)
+
+
+def _parse_valid_candidate_items(output: str | bytes) -> list[CandidateIdea]:
+    """Keep valid items from a partly malformed Scout batch; never repair fields."""
+
+    try:
+        value = json.loads(output)
+    except (TypeError, ValueError):
+        return []
+    if isinstance(value, dict) and set(value) == {"candidates"}:
+        value = value["candidates"]
+    elif isinstance(value, dict) and "candidate_id" in value and "title" in value:
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    valid = []
+    for item in value:
+        try:
+            valid.append(CandidateIdea.model_validate(item, strict=True))
+        except ValidationError:
+            # An invalid sibling must not discard schema-valid ideas in the batch.
+            continue
+    return valid
+
+
+def repair_query_envelope(output: str | bytes) -> str | None:
+    """Unwrap an exact, known query container without changing query fields.
+
+    Reject ambiguous envelopes containing additional keys. Full contract
+    validation still applies to the extracted list, including unknown fields.
+    """
+
+    try:
+        value = json.loads(output)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(value, dict) and len(value) == 1:
+        for key in ("items", "queries"):
+            if key in value and isinstance(value[key], list):
+                return json.dumps(value[key], ensure_ascii=False)
+    return None
 
 
 def _strip_json_markdown_fence(output: str | bytes) -> str | bytes:

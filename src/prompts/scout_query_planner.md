@@ -12,6 +12,8 @@ that discover observed problems, user needs, and promising areas for capstone id
 - Do not exceed the configured query count or per-query result limit.
 - Treat the request as the only source of user constraints. Do not weaken exclusions.
 - Return only JSON matching the supplied output schema. Do not include markdown.
+- Return a JSON object with exactly one key, `queries`, containing the query array.
+  The output schema below defines each query's required fields.
 
 # Input
 

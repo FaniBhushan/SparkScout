@@ -46,6 +46,12 @@ is needed to complete the listed human-review task.
 
 ## Further improvements
 
+- [ ] Add concise, practical “getting the best results” guidance to the UI or
+      help docs. Suggest focused requests (for example, one interest area per
+      run, with a clear problem and constraints) and explain cost controls such
+      as selecting only relevant sources, using a simpler search preset, and
+      previewing the configuration before a live run. Present these as useful
+      tips, not guarantees of quality or cost.
 - [ ] Improve verified proposal yield across domains. Current runs do not prove
       that every domain can produce a gate-passing, evidence-verified proposal.
       Preserve explicit failure reasons; never invent evidence to fill a slot.
@@ -54,9 +60,24 @@ is needed to complete the listed human-review task.
       alternatives with the same rubric and evidence rules.
 - [ ] Improve verifier accuracy with larger held-out and adversarial evaluations;
       review false rejections and unsupported claims with human ratings.
+- [ ] Review the Critic evidence-and-assessment design. Trace how Scout ideas,
+      Library's run-scoped in-memory chunks, Critic context selection, and
+      source/chunk citations fit together. Compare safer ways to ground judgments
+      and validate citations; determine whether invalid or missing citations
+      should invalidate a whole assessment or instead be treated as unsupported
+      evidence while preserving a clearly caveated score. Evaluate whether a
+      bounded retrieve-more-and-reassess loop addresses actual retrieval gaps or
+      would only add cost without fixing citation mismatches. Record the design
+      decision and validate it on frozen cases before implementation.
 - [ ] Make recovery-first behavior consistent across interpretation, planning,
       adapters, workers, orchestration, and UI. Cover optional failures,
       adapter over-returns, UI resume, and cross-stage fault recovery.
+- [ ] Add a bounded Scout response-correction loop for schema-invalid model
+      output. The current smaller-batch retry can receive safe field/type hints;
+      extend this into one explicit correction attempt, keep any valid candidates
+      already produced, and report a useful partial result if correction still
+      fails. Keep raw model output out of traces/UI, charge retries to the same
+      run budget, and stop after the configured attempt limit.
 - [ ] Evaluate a GitHub GraphQL adapter against the current REST repository
       search. On identical queries, measure unique usable repositories,
       request/point consumption, latency, response size, and rate-limit errors.

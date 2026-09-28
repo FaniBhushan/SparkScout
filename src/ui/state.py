@@ -29,6 +29,8 @@ def _initialize() -> None:
         state.result = None
     if "ui_page" not in state:
         state.ui_page = "configure"
+    if "run_history_notice" not in state:
+        state.run_history_notice = None
 
 
 def _reset_search() -> None:

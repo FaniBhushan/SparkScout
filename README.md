@@ -129,6 +129,11 @@ python -m streamlit run streamlit_app.py
    a gate-passing proposal; read its caveats. Download the run result or
    reviewed configuration if needed.
 
+Completed Streamlit runs are also saved locally under `runs/ui_results/` so you
+can reopen them from **Saved runs on this computer** without repeating paid
+search/model calls. The entire `runs/` directory is Git-ignored; saved results
+stay on this machine and may still contain research-derived content.
+
 Editing settings invalidates the preview, so preview again before starting.
 The UI can download the reviewed configuration as JSON for `--config` in the
 CLI. Reusing a config with uploads also requires the same files via `--upload`
@@ -214,3 +219,15 @@ other repository files; frozen fixtures must stay synthetic.
 
 The full product requirements are in
 [cross-domain-multi-agent-capstone-orchestrator.md](cross-domain-multi-agent-capstone-orchestrator.md).
+
+## Project notes and demo materials
+
+- [Daily work log index](daily%20logs/README.md) summarizes project work by date.
+- [Demo video script](docs/demo_video_script.md) provides a short recording plan
+  and calls out the synthetic-data and evaluation caveats to keep visible.
+- [Design and evaluation summary](docs/design_doc_submission.md) describes the
+  architecture, measured results, and their limitations.
+
+The Offline demo is for demonstrating the workflow with synthetic records; it
+does not establish live-search quality. See the evaluation report for measured
+live-model results and sample-size caveats.

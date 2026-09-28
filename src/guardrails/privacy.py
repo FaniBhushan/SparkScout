@@ -29,6 +29,12 @@ _CONTACT = re.compile(
     r"(?<!\w)\+\d[\d ()-]{7,}\d\b"
 )
 _CREDENTIAL_FIELD = re.compile(r"(?:api[_ -]?key|access[_ -]?token|password|secret)", re.I)
+_SAFE_SCHEMA_FIELDS = frozenset({
+    "candidate_id", "origin", "title", "problem_statement", "target_users",
+    "proposed_outcome", "why_it_matters", "evaluation_method", "domain_tags",
+    "required_data", "required_tools", "access_assumptions", "evidence",
+    "source_id", "chunk_id", "stance", "note",
+})
 
 
 class SensitiveContentError(ValueError):
@@ -70,12 +76,45 @@ def check_privacy(value: object) -> list[str]:
 def safe_error_message(error: Exception) -> str:
     """Do not echo rejected model/input values through UI or CLI errors."""
 
-    if isinstance(error, ValidationError):
-        # Input values and validator context can contain entire documents.
-        message = "; ".join(
-            f"{'.'.join(map(str, item['loc']))}: {item['msg']}"
-            for item in error.errors(include_input=False, include_context=False, include_url=False)
+    # Orchestration wraps failures with their raw exception text. Follow the
+    # cause for model schema failures so the UI never displays rejected output.
+    if isinstance(error.__cause__, ValidationError):
+        stage = getattr(error, "stage", "research")
+        details = safe_validation_summary(error.__cause__)
+        suffix = f" Schema issue: {details}." if details else ""
+        return (
+            f"The {stage} stage could not read the model's response after retrying. "
+            f"Your configuration is still available. Try Start research again.{suffix}"
         )
+    if isinstance(error, ValidationError):
+        message = safe_validation_summary(error)
     else:
         message = str(error)
     return _CONTACT.sub("[contact omitted]", _SECRETS.sub("[credential omitted]", message))
+
+
+def safe_validation_hints(error: ValidationError) -> list[str]:
+    """Return schema paths and error codes without model values or messages."""
+
+    summaries = []
+    for item in error.errors(include_input=False, include_context=False, include_url=False):
+        path = []
+        for part in item["loc"]:
+            if isinstance(part, int):
+                path.append(str(part))
+            elif isinstance(part, str) and part in _SAFE_SCHEMA_FIELDS:
+                path.append(part)
+            else:
+                # Unknown keys can be model-generated and may contain user data.
+                path.append("field")
+        error_type = item.get("type", "invalid")
+        if not isinstance(error_type, str) or not re.fullmatch(r"[a-z0-9_.-]{1,40}", error_type):
+            error_type = "invalid"
+        summaries.append(f"{'.'.join(path) or 'response'} ({error_type})")
+    return summaries[:5]
+
+
+def safe_validation_summary(error: ValidationError) -> str:
+    """Format the safe field-level schema hints for a short user-facing message."""
+
+    return "; ".join(safe_validation_hints(error))

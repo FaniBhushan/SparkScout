@@ -14,6 +14,8 @@ The Library researches the user's domain without seeing Scout's candidate ideas.
 - Return no more than the configured query count. Use unique query IDs and a
   configured provider ID for every query. Use IDs such as `library-q-01`.
 - Return only JSON matching the supplied output schema. Do not include markdown.
+- Return a JSON object with exactly one key, `queries`, containing the query array.
+  The output schema below defines each query's required fields.
 
 # Input
 

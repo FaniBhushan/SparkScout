@@ -1,92 +1,127 @@
 # ScoutSpark: Evidence-Grounded Capstone Idea Discovery
 
-**AI Engineering Cohort design document | 27 September 2026**
+**AI Engineering Cohort design document | 28 September 2026**
 
-## 1. Problem statement
+## 1. Project motivation
+
+I explored several capstone ideas but was not convinced by them, and I did not
+have the time to spend weeks researching each one. To make that process easier,
+I built a single-agent research assistant. Its early runs were promising: it
+helped me explore ideas and gather useful starting points. I then recognized
+that the same research bottleneck could affect many students, not just me. That
+became the motivation for ScoutSpark: a capstone project that develops the idea
+into a more structured, evidence-grounded workflow for discovering and assessing
+project proposals.
+
+## 2. Problem and intended user
 
 Capstone students must turn broad interests into feasible projects by finding
 real problems, evidence, data, tools, and prior work that fit their skills,
-resources, team, and deadline. This scattered research takes time, and a
-promising idea may lack data access or adequate evidence.
+resources, team, and deadline. This research is scattered, and a promising idea
+may lack data access or adequate evidence.
 
 ScoutSpark turns a reviewed request into ranked, evidence-linked project ideas
-and a cited proposal when support permits. It surfaces constraints and evidence
-gaps; it does not guarantee novelty or feasibility when sources or budget are
-insufficient.
+and cited proposals when evidence and budgets permit. It surfaces constraints,
+gate failures, and evidence gaps. It does not guarantee novelty, feasibility, or
+a proposal for every request.
 
-## 2. Architecture and data surface
+## 3. User workflow
 
-The data surface is actively queried: Tavily web search, GitHub repository
-metadata, and optional user documents. Frozen records/passages are synthetic
-test data. Source records retain provenance; bounded chunks carry evidence.
-Each run creates an in-memory TF-IDF/keyword index, with no semantic embedding
-model or persistent vector database.
+1. The student enters a domain, interests, skills, deadline, and constraints in
+   Streamlit or the CLI.
+2. The student reviews the resolved source plan, rubric weights, and run limits
+   in preflight. Invalid or unavailable settings fail before research calls.
+3. Scout and Library perform bounded discovery work; the coordinator validates
+   and joins their outputs before evaluation.
+4. The student inspects weighted scorecards, evidence, citations, and hard-gate
+   reasons. A displayed score finalist is not automatically eligible for a
+   detailed proposal.
+5. Finalization returns verified cited proposals when checks pass. If they do
+   not, the result preserves the explicit failure and may include one bounded
+   recovery attempt.
 
-**AI components and RAG loop:** Scout and Library are separate LLM-backed
-workers: Scout plans discovery searches and generates ideas; Library independently
-researches sources and prepares evidence chunks. The orchestrator joins their
-results. For each candidate, Critic retrieves relevant Library passages and asks
-the judge to assess the rubric; code computes weighted scores and hard gates.
-The proposal writer drafts from cited evidence and a verifier checks support.
-Finalization tries the next candidate after failure, then allows one bounded
-recovery round. These are role-specialized workers, not open-ended autonomous
-loops.
+## 4. Architecture and data surface
 
-```mermaid
-flowchart LR
-    User["Student request"] --> Setup["Reviewed configuration<br/>Preflight + budgets"]
-    Setup --> Orchestrator["Orchestrator<br/>join · validate · coordinate"]
+![ScoutSpark system architecture](scoutspark_architecture.svg)
 
-    Orchestrator --> Scout["Scout agent<br/>plan queries · generate ideas"]
-    Orchestrator --> Library["Library agent<br/>plan queries · gather evidence"]
-    Scout --> Adapters["Source adapters"]
-    Library --> Adapters
-    Adapters --> Sources["Tavily · GitHub<br/>optional uploads · synthetic fixtures"]
-    Sources --> Scout
-    Sources --> Library
+Download: [editable SVG](scoutspark_architecture.svg) · [1920×1080 PNG](scoutspark_architecture.png).
 
-    Scout --> Candidates["Candidate ideas"]
-    Scout --> Join
-    Library --> Join["Join source receipts<br/>validate identity and coverage"]
-    Join --> Index["Run-scoped in-memory index<br/>TF-IDF + keyword overlap"]
-    Candidates --> Critic["Critic agent<br/>retrieve · judge · score + gates"]
-    Critic -- "candidate / criterion query" --> Index
-    Index -- "top-k evidence passages" --> Critic
-    Critic --> Finalize["Proposal writer<br/>draft from cited evidence"]
-    Finalize --> Verify["Evidence / citation verifier"]
-    Verify --> Results["Ranked scorecards<br/>+ verified proposals"]
-    Verify -. "if none survive" .-> Recovery["One bounded recovery round"]
-    Recovery -. "replacement candidates" .-> Critic
+**Live and evaluation data:** Live adapters are available for Tavily web search
+and GitHub repository metadata; users may also provide documents. The controlled
+sequential-versus-parallel comparison below used synthetic frozen source evidence
+with real model calls. The fully offline demo uses synthetic sources and
+deterministic simulated model responses. Those offline results verify software
+behavior, not real-world research quality. A separate live run returned one
+proposal, but review found weak reasoning about task-data availability, so it is
+not treated as independently validated output. See
+[`evals/demo_submission_2026-09-27.md`](../evals/demo_submission_2026-09-27.md),
+[`evals/recovery_review_2026-09-27.md`](../evals/recovery_review_2026-09-27.md),
+and [`evals/controlled_evaluation_2026-09-27.md`](../evals/controlled_evaluation_2026-09-27.md).
 
-    Model["LLM client + role prompts"] -. "used by Scout, Library, Critic, writer, verifier" .-> Scout
-    Model -.-> Library
-    Model -.-> Critic
-    Model -.-> Finalize
-    Model -.-> Verify
-    Contracts["Pydantic contracts"] -. "validated stage boundaries" .-> Orchestrator
-    Ops["Guardrails · shared budgets · tracing / checkpoints"] -. "cross-cutting controls" .-> Orchestrator
+**AI components and RAG loop:** Scout plans discovery searches and generates
+source-linked candidate ideas. Library independently plans research and prepares
+evidence chunks without using Scout's candidate list. The coordinator validates
+the join, checks source identity and coverage, and creates a run-scoped retrieval
+index. Critic retrieves relevant passages for each candidate and asks an LLM to
+assess the rubric. Code applies configured weights, deterministic tie-breaking,
+and hard gates. A proposal writer drafts from the cited evidence; a separate
+verifier checks claims, citations, and essential task-data dependencies. These
+are bounded role-specialized workers, not open-ended autonomous loops.
 
-    classDef agent fill:#eee8ff,stroke:#7453a6,color:#211238,stroke-width:2px
-    classDef rag fill:#e0f4f2,stroke:#2b8178,color:#123b37,stroke-width:2px
-    classDef source fill:#fff4de,stroke:#b57a24,color:#50330f
-    classDef control fill:#f1f3f5,stroke:#58616b,color:#222
-    classDef output fill:#e8f5e9,stroke:#3c7d48,color:#17351b
-    class Scout,Library,Critic,Finalize,Verify agent
-    class Index rag
-    class Adapters,Sources source
-    class Setup,Orchestrator,Model,Contracts,Ops control
-    class Results output
-```
+**Chunking and retrieval choice:** Each run uses the configured local TF-IDF
+cosine and keyword-overlap retriever. Source text is divided into 1,800-character
+chunks with 180-character overlap. The index is limited to 120 chunks, 120,000
+corpus characters, and 1 MB, and is retained only for the run. It uses no
+semantic embedding model and no persistent vector database. This keeps evidence
+provenance local and bounded. Semantic embeddings are deferred until held-out
+retrieval evaluation shows that this baseline misses relevant evidence. Exact
+limits are in [`config/retrieval.json`](../config/retrieval.json); the runtime
+retrieval behavior is documented in
+[`docs/orchestration.md`](orchestration.md).
 
-Pydantic contracts validate each stage boundary. Streamlit and the CLI share the
-same application and preflight path.
+**Privacy and trust boundaries:** Deterministic checks block recognizable
+credentials and warn about possible email addresses or phone numbers. Uploaded
+text is scanned after extraction; model inputs and outputs are scanned at the
+client boundary; upload snippets and chunk text are redacted from exported
+results. Traces retain metadata and usage rather than matched text. User and
+retrieved text remain untrusted input; code owns provider permissions, budgets,
+weights, and ranking. These checks are limited pattern-based safeguards: they
+can miss obfuscated secrets or other sensitive content, and prompt instructions
+do not guarantee that a live model will resist every injection. Warnings are not
+a privacy guarantee. See
+[`docs/guardrails.md`](guardrails.md).
 
-## 3. Evaluation and approach comparison
+Pydantic contracts validate stage boundaries. Streamlit and the CLI share the
+same application and preflight path. The coordinator owns run state, budgets,
+retries, stage transitions, ranking, checkpoints, and final selection.
+
+## 5. Failure handling and recovery
+
+| Failure | System behavior | Verification / limit |
+| --- | --- | --- |
+| Invalid request or unavailable required provider | Preflight returns an actionable error before research starts. | Covered by configuration and UI checks. |
+| Malformed model output | Typed `invalid_output` failure; schema-invalid output is not accepted. | Retry policy does not retry malformed output. |
+| Required Scout or Library branch fails | The required run fails; in parallel mode the sibling is cancelled and drained. | Blocking provider calls may finish within socket timeout and remain charged. |
+| Insufficient source coverage or empty retrieval | Critic is skipped and the run reports insufficient coverage. | Evidence rules and minimum coverage are not relaxed to fill a slot. |
+| Draft or verification fails | Record the failed candidate and try the next eligible candidate. | One correction and recheck is allowed; the verifier can still make semantic errors. |
+| No proposal survives | One bounded recovery round may reuse evidence, make up to two searches, and evaluate up to three replacements under the same budget. | Exhaustion remains a failure; recovery does not guarantee a proposal. |
+| Interruption or resume | Optional CLI checkpoints reuse valid completed stages and rerun missing or invalid work. | Resume requires the same run inputs and configuration; Streamlit does not expose resume controls. |
+
+Reliability tests cover typed failures, branch cancellation, retries, checkpoint
+resume, replay without model calls, and scheduling equivalence under fixed model
+responses. These deterministic tests establish software invariants, not live
+model quality. The verifier's small component evaluations still show false
+rejections and missed unsupported claims; its limitations are reported in
+[`evals/reliability-2026-09-27.md`](../evals/reliability-2026-09-27.md).
+
+## 6. Evaluation and approach comparison
+
+### Controlled scheduling comparison
 
 The controlled comparison used the same three synthetic frozen cases, prepared
-requests, model, and limits. Only scheduling changed: sequential versus
-concurrent Scout/Library execution. This is an orchestration ablation, **not**
-a comparison with a single-agent or vanilla-RAG architecture.
+requests, model, rubric, and limits. The only intended change was sequential
+versus concurrent Scout/Library execution. This is an orchestration ablation,
+**not** a single-agent or vanilla-RAG comparison.
 
 | Measure | Sequential | Parallel |
 | --- | ---: | ---: |
@@ -97,29 +132,49 @@ a comparison with a single-agent or vanilla-RAG architecture.
 | Elapsed time | 376.0 s | 353.6 s |
 | Model tokens / estimated cost | 181,291 / $0.04665 | 172,152 / $0.04486 |
 
-Each mode was run once and produced different proposals. Parallel latency was
-about 6% lower and estimated cost about 4% lower, but these descriptive results
-do not prove a general improvement; yield stayed low. Missing proposals were not
-counted as citation passes. An offline deterministic test confirms equivalent
-results when both modes receive identical fixed model responses.
+Each mode ran once and produced different proposals. Parallel latency was about
+6% lower and estimated cost about 4% lower, but those descriptive results do not
+prove a general improvement. Yield remained low, and missing proposals were not
+counted as citation passes. Later runs used changed verifier and recovery
+behavior and produced different results; they are reported separately in the
+linked recovery evaluation rather than combined into this baseline.
 
-Metrics are per-case proposal yield, source coverage, citation integrity,
-hard-gate outcomes, latency, and provider/model cost. Target: at least one
-verified proposal per adequately covered case, without relaxing evidence rules.
-A blind LLM judge rated three proposals (n=3): usefulness 3.00, specificity
-3.00, evidence 2.00, feasibility 3.33, and actionability 3.00 out of 5. Human
-ratings are pending; this small sample is not general quality evidence. Details:
-`evals/demo_submission_2026-09-27.md`.
+An offline deterministic test confirms equivalent results when both scheduling
+modes receive identical fixed model responses. The application tracks proposal
+yield, source coverage, citation integrity, hard-gate outcomes, latency, token
+usage, and estimated model cost. Provider charges may differ from the app's cost
+estimate. A blind LLM judge reviewed three available proposals (n=3): usefulness
+3.00, specificity 3.00, evidence sufficiency 2.00, feasibility 3.33, and
+actionability 3.00 out of 5. Human ratings are pending; no human agreement
+measure exists. The judge scores are not ground truth.
 
-## 4. Design and framework justification
+### Design trade-offs
 
-Role separation makes each stage's evidence and failures inspectable and
-independently testable. Parallelism overlaps independent searches, but has not
-shown a proposal-quality advantage; sequential mode remains the CLI default.
-Pydantic validates contracts, and the OpenAI SDK provides model calls. Pydantic
-AI, LangGraph, and smolagents were not added because this bounded workflow and
-single recovery round do not yet demonstrate a need for framework abstractions.
-Streamlit is the optional UI. Semantic embeddings remain deferred until held-out
-retrieval tests expose misses from the local TF-IDF/keyword baseline. The
-complexity choice is provisional: a true single-agent/plain-RAG baseline is
-still needed to show whether it improves end-to-end quality or cost.
+| Choice | Current approach | Benefit | Trade-off / evidence still needed |
+| --- | --- | --- | --- |
+| Retrieval | In-memory TF-IDF plus keywords | Local, bounded index with source provenance. | May miss paraphrased evidence; compare embeddings on held-out cases before changing. |
+| Worker scheduling | Sequential default; parallel option | Parallelism can overlap Scout and Library research. | Single runs are inconclusive; repeat on a larger frozen set before changing the default. |
+| Orchestration framework | Custom coordinator, Pydantic contracts, role prompts, one recovery round | State, budgets, and failures stay inspectable and testable. | Measure against a single-agent/plain-RAG baseline; current results do not justify a heavier framework. |
+
+The evaluation is preliminary: three synthetic frozen cases, one run per
+scheduling mode, and three LLM-judged proposals. The course target of a larger
+held-out set, repeated A/B runs, and representative independent human review is
+not yet met. The target is at least one verified proposal per adequately covered
+case without relaxing evidence rules. See
+[`evals/demo_submission_2026-09-27.md`](../evals/demo_submission_2026-09-27.md)
+for reproduction details and the dated measurements.
+
+## 7. Framework justification and next evaluation steps
+
+Role separation makes evidence and failures inspectable and permits isolated
+testing. Pydantic validates contracts; the OpenAI SDK provides model calls;
+Streamlit provides the optional local UI. Pydantic AI, LangGraph, and smolagents
+were not added because this bounded workflow and single recovery round do not
+yet demonstrate a need for their abstractions. This remains a provisional
+complexity choice until a single-agent/plain-RAG baseline is measured.
+
+The next evaluation work is to complete independent human scoring of the saved
+proposals, expand held-out coverage, repeat the scheduling comparison enough to
+measure variance, and compare against a single-agent/plain-RAG baseline. Verifier
+accuracy and retrieval quality need larger held-out and adversarial reviews.
+Dynamic criteria and user-triggered feedback rounds remain future work.

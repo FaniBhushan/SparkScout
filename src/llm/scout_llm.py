@@ -4,6 +4,7 @@ from typing import cast
 
 from pydantic import ValidationError
 
+from src.guardrails.privacy import safe_validation_hints
 from src.llm.client import LLMClient, ModelResponseError
 from src.llm.prompt_call import call_prompt
 from src.llm.query_planner import _LLMQueryPlanner
@@ -109,6 +110,7 @@ async def generate_candidate_batches(
     batch_limit = (request.desired_candidate_count + batch_size - 1) // batch_size
     candidates: list[CandidateIdea] = []
     initial_recovery_used = False
+    active_recovery_feedback = dict(recovery_feedback or {})
     for batch_index in range(batch_limit + 1):
         if len(candidates) >= request.desired_candidate_count:
             break
@@ -119,7 +121,7 @@ async def generate_candidate_batches(
             "REQUEST_JSON": request, "SOURCE_RECORDS_JSON": sources,
             "BATCH_JSON": {
                 "requested_count": requested_count,
-                "recovery_feedback": recovery_feedback,
+                "recovery_feedback": active_recovery_feedback or None,
                 "existing_ideas": [
                     {"target_users": item.target_users, "problem_statement": item.problem_statement,
                      "proposed_outcome": item.proposed_outcome, "origin": item.origin}
@@ -147,6 +149,10 @@ async def generate_candidate_batches(
                 break
             if initial_recovery_used:
                 raise
+            if isinstance(error, ValidationError):
+                # Share only contract paths and Pydantic error codes—not rejected
+                # output or message text—with the lower-cost recovery attempt.
+                active_recovery_feedback["response_schema_issues"] = safe_validation_hints(error)
             # Retry only the failed initial batch with a smaller output request.
             initial_recovery_used = True
             batch_size = max(1, batch_size // 2)

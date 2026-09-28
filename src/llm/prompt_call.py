@@ -8,6 +8,7 @@ from contextlib import nullcontext
 from pydantic import ValidationError
 
 from src.guardrails import check_privacy, emit_advisories
+from src.guardrails.privacy import safe_validation_hints
 from src.llm.client import LLMClient, ModelReply, ModelResponseError
 from src.models import UsageRecord
 from src.observability import RunTracer
@@ -72,7 +73,12 @@ async def call_prompt(
                         tracer.event(name, "response_repaired")
                     return result
                 return parse_model_output(name, reply.text)
-            except ValidationError:
+            except ValidationError as error:
+                if tracer:
+                    # Record only safe schema paths and codes, never rejected text.
+                    tracer.event(name, "schema_validation_failed",
+                                 task_id=task_id,
+                                 schema_issues=safe_validation_hints(error))
                 if attempt >= validation_retry_limit:
                     raise
         raise AssertionError("unreachable prompt validation retry state")

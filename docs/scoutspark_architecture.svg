@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title description">
+  <title id="title">ScoutSpark system architecture</title>
+  <desc id="description">A numbered flow from a student request through guardrails, reviewed configuration, the ScoutSpark orchestrator, Scout and Library workers, evidence sources, Critic evaluation, proposal verification, and ranked cited results. A dashed loop shows bounded recovery.</desc>
+
+  <defs>
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#425568"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#17624D"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6B49AF"/>
+    </marker>
+    <filter id="soft-shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#152536" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .title { font: 700 34px Inter, Arial, sans-serif; fill: #142638; }
+      .subtitle { font: 400 18px Inter, Arial, sans-serif; fill: #56697B; }
+      .box-title { font: 700 24px Inter, Arial, sans-serif; fill: #142638; }
+      .box-title-light { font: 700 28px Inter, Arial, sans-serif; fill: #FFFFFF; }
+      .body { font: 400 18px Inter, Arial, sans-serif; fill: #26394B; }
+      .body-small { font: 400 16px Inter, Arial, sans-serif; fill: #40566B; }
+      .body-light { font: 400 18px Inter, Arial, sans-serif; fill: #EAF4F0; }
+      .strong-light { font: 700 18px Inter, Arial, sans-serif; fill: #FFFFFF; }
+      .flow { fill: none; stroke: #425568; stroke-width: 3.5; marker-end: url(#arrow-slate); }
+      .flow-green { fill: none; stroke: #17624D; stroke-width: 3.5; marker-end: url(#arrow-green); }
+      .flow-purple { fill: none; stroke: #6B49AF; stroke-width: 3.5; stroke-dasharray: 12 9; marker-end: url(#arrow-purple); }
+      .flow-label { font: 600 16px Inter, Arial, sans-serif; fill: #52677C; paint-order: stroke; stroke: #FFFFFF; stroke-width: 7px; stroke-linejoin: round; }
+      .flow-label-green { font: 600 16px Inter, Arial, sans-serif; fill: #17624D; paint-order: stroke; stroke: #FFFFFF; stroke-width: 7px; stroke-linejoin: round; }
+      .flow-label-purple { font: 600 16px Inter, Arial, sans-serif; fill: #5B3896; paint-order: stroke; stroke: #FFFFFF; stroke-width: 7px; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#FFFFFF"/>
+
+  <text x="72" y="58" class="title">ScoutSpark — evidence-grounded capstone discovery</text>
+  <text x="72" y="89" class="subtitle">Reviewed inputs, independent research, retrieval-based evaluation, and explicit failure handling</text>
+
+  <!-- User -->
+  <rect x="70" y="340" width="270" height="168" rx="20" fill="#EFF6F2" stroke="#17624D" stroke-width="3"/>
+  <text x="205" y="391" text-anchor="middle" class="box-title">Student</text>
+  <text x="205" y="425" text-anchor="middle" class="body">domain · interests</text>
+  <text x="205" y="454" text-anchor="middle" class="body">skills · deadline · budget</text>
+  <text x="205" y="483" text-anchor="middle" class="body-small">Streamlit UI or CLI</text>
+
+  <!-- Guardrails and reviewed configuration -->
+  <rect x="510" y="116" width="620" height="164" rx="20" fill="#FCF1EF" stroke="#B34E4C" stroke-width="3" filter="url(#soft-shadow)"/>
+  <text x="820" y="162" text-anchor="middle" class="box-title" fill="#8F302F">INPUT GUARDRAILS + PREFLIGHT</text>
+  <text x="820" y="198" text-anchor="middle" class="body">privacy and secret checks · request validation</text>
+  <text x="820" y="229" text-anchor="middle" class="body">resolved sources · rubric weights · run limits</text>
+  <text x="820" y="258" text-anchor="middle" class="body-small" font-style="italic">previewed before search or model calls</text>
+
+  <!-- Main orchestrator -->
+  <rect x="520" y="364" width="650" height="236" rx="22" fill="#17624D" stroke="#0B4636" stroke-width="4" filter="url(#soft-shadow)"/>
+  <text x="845" y="416" text-anchor="middle" class="box-title-light">ORCHESTRATOR</text>
+  <text x="845" y="452" text-anchor="middle" class="body-light">validated contracts · coordinator-owned run state</text>
+  <text x="845" y="494" text-anchor="middle" class="strong-light">join · rank · budget · checkpoint · trace</text>
+  <text x="845" y="535" text-anchor="middle" class="body-light">sequential baseline or parallel Scout / Library fork</text>
+  <text x="845" y="568" text-anchor="middle" class="body-light">deterministic weights and hard gates remain in code</text>
+
+  <!-- Finalization -->
+  <rect x="1420" y="350" width="420" height="228" rx="20" fill="#F5F0FC" stroke="#6B49AF" stroke-width="3" filter="url(#soft-shadow)"/>
+  <text x="1630" y="400" text-anchor="middle" class="box-title" fill="#4D327B">FINALIZATION</text>
+  <text x="1630" y="438" text-anchor="middle" class="body">proposal writer</text>
+  <text x="1630" y="468" text-anchor="middle" class="body">claim and citation verifier</text>
+  <text x="1630" y="507" text-anchor="middle" class="body-small">try the next eligible candidate</text>
+  <text x="1630" y="535" text-anchor="middle" class="body-small">or one bounded recovery round</text>
+
+  <!-- Workers -->
+  <rect x="250" y="674" width="390" height="142" rx="18" fill="#F4F8FD" stroke="#2F70B7" stroke-width="3"/>
+  <text x="445" y="720" text-anchor="middle" class="box-title" fill="#1C5591">SCOUT</text>
+  <text x="445" y="755" text-anchor="middle" class="body">plan discovery queries</text>
+  <text x="445" y="785" text-anchor="middle" class="body-small">generate diverse, source-linked ideas</text>
+
+  <rect x="700" y="674" width="390" height="142" rx="18" fill="#FCF8EF" stroke="#927331" stroke-width="3"/>
+  <text x="895" y="720" text-anchor="middle" class="box-title" fill="#6E5420">LIBRARY</text>
+  <text x="895" y="755" text-anchor="middle" class="body">research independently of Scout</text>
+  <text x="895" y="785" text-anchor="middle" class="body-small">capture source records and bounded chunks</text>
+
+  <rect x="1190" y="674" width="390" height="142" rx="18" fill="#EFF6F2" stroke="#17624D" stroke-width="3"/>
+  <text x="1385" y="720" text-anchor="middle" class="box-title" fill="#114E3E">CRITIC</text>
+  <text x="1385" y="755" text-anchor="middle" class="body">criterion-specific retrieval</text>
+  <text x="1385" y="785" text-anchor="middle" class="body-small">LLM assessment · code scoring + gates</text>
+
+  <!-- Evidence substrate -->
+  <rect x="270" y="886" width="1120" height="150" rx="20" fill="#F2F7FC" stroke="#2F70B7" stroke-width="3"/>
+  <text x="830" y="922" text-anchor="middle" class="box-title" fill="#1C5591">RUN-SCOPED EVIDENCE SUBSTRATE</text>
+
+  <rect x="310" y="940" width="490" height="82" rx="14" fill="#FFFFFF" stroke="#2F70B7" stroke-width="2"/>
+  <text x="555" y="973" text-anchor="middle" class="body" font-weight="700">Source adapters</text>
+  <text x="555" y="1001" text-anchor="middle" class="body-small">Tavily · GitHub · optional documents · synthetic fixtures</text>
+
+  <rect x="840" y="940" width="510" height="82" rx="14" fill="#FFFCF7" stroke="#927331" stroke-width="2"/>
+  <text x="1095" y="968" text-anchor="middle" class="body" font-weight="700">Temporary retrieval index</text>
+  <text x="1095" y="992" text-anchor="middle" class="body-small">TF-IDF cosine + keyword overlap</text>
+  <text x="1095" y="1015" text-anchor="middle" class="body-small">1,800-char chunks · 180 overlap · run-only</text>
+
+  <!-- Main flow: user, preflight, orchestration -->
+  <path d="M 340 424 H 422 V 198 H 492" class="flow"/>
+  <text x="380" y="185" class="flow-label" transform="rotate(-90 380 185)">(1) request</text>
+
+  <path d="M 820 280 V 347" class="flow"/>
+  <text x="843" y="324" class="flow-label">(2) reviewed plan</text>
+
+  <!-- Orchestrator dispatch -->
+  <path d="M 700 600 V 638 H 445 V 658" class="flow"/>
+  <text x="470" y="635" class="flow-label">(3a) discover</text>
+
+  <path d="M 965 600 V 638 H 895 V 658" class="flow"/>
+  <text x="930" y="635" class="flow-label">(3b) research</text>
+
+  <!-- Workers to sources -->
+  <path d="M 445 816 V 870" class="flow"/>
+  <text x="463" y="853" class="flow-label">(4) queries</text>
+
+  <path d="M 895 816 V 854 H 705 V 870" class="flow"/>
+  <text x="728" y="850" class="flow-label">(4) evidence</text>
+
+  <!-- Index to critic -->
+  <path d="M 1095 944 V 852 H 1385 V 832" class="flow"/>
+  <text x="1140" y="847" class="flow-label">(5) retrieve passages</text>
+
+  <!-- Orchestrator to Critic -->
+  <path d="M 1170 510 H 1340 V 658" class="flow"/>
+  <text x="1203" y="500" class="flow-label">(5) validated join</text>
+
+  <!-- Critic to finalization -->
+  <path d="M 1450 674 V 620 H 1630 V 594" class="flow"/>
+  <text x="1485" y="616" class="flow-label">(6) ranked assessments</text>
+
+  <!-- Results back to user -->
+  <path d="M 1420 421 H 1328 V 313 H 250 V 324" class="flow-green"/>
+  <text x="1120" y="302" class="flow-label-green">(8) ranked scorecards · cited proposals · explicit failures</text>
+
+  <!-- Recovery loop -->
+  <path d="M 1840 492 H 1872 V 1034 H 1460 V 482 H 1187" class="flow-purple"/>
+  <text x="1891" y="812" class="flow-label-purple" transform="rotate(-90 1891 812)">(7) bounded recovery using retained evidence and remaining budget</text>
+
+  <!-- Small legend -->
+  <g transform="translate(1460 914)">
+    <text x="0" y="0" class="body-small" font-weight="700">Flow key</text>
+    <line x1="0" y1="28" x2="76" y2="28" stroke="#425568" stroke-width="3.5" marker-end="url(#arrow-slate)"/>
+    <text x="94" y="34" class="body-small">primary run</text>
+    <line x1="0" y1="64" x2="76" y2="64" stroke="#6B49AF" stroke-width="3.5" stroke-dasharray="12 9" marker-end="url(#arrow-purple)"/>
+    <text x="94" y="70" class="body-small">recovery path</text>
+  </g>
+
+  <text x="72" y="1065" class="body-small">Evaluation note: the controlled comparison used synthetic frozen evidence; offline demo model responses are simulated.</text>
+</svg>
